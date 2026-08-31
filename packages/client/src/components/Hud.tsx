@@ -116,6 +116,14 @@ export function Hud() {
           />
           Girar en cada turno
         </label>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={s.soundOn}
+            onChange={(e) => s.setSoundOn(e.target.checked)}
+          />
+          Sonido
+        </label>
         {s.mode !== 'online' && (
           <button onClick={s.toggleBalancePanel}>
             {s.showBalance ? 'Ocultar' : 'Mostrar'} panel de balance

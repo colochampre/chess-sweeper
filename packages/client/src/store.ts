@@ -22,6 +22,7 @@ import {
 } from '@cm/engine';
 import { playEvents, type AnimApi } from './anim/eventPlayer.js';
 import { OnlineClient, clearSeat, defaultServerUrl, loadSeat, saveSeat } from './online.js';
+import { playOutcome, setSoundEnabled, soundEnabled } from './sfx.js';
 import { ANIM } from './theme.js';
 
 export type Mode = 'hotseat' | 'bot' | 'online';
@@ -85,6 +86,7 @@ interface AppState {
   orientation: Color;
   flipEachTurn: boolean;
   showBalance: boolean;
+  soundOn: boolean;
   error: string | null;
 
   startLocal: (options: LocalOptions) => void;
@@ -99,6 +101,7 @@ interface AppState {
   submitMove: (move: Move) => void;
   flipBoard: () => void;
   setFlipEachTurn: (value: boolean) => void;
+  setSoundOn: (value: boolean) => void;
   toggleBalancePanel: () => void;
 }
 
@@ -156,6 +159,13 @@ export const useGame = create<AppState>((set, get) => {
         for (const cell of cells) revealed[cell] = true;
         return { revealed };
       }),
+    gameEnd: (_status, winner) => {
+      const s = get();
+      // En hotseat no hay un "tu": suena victoria para quien haya ganado.
+      if (winner === null) playOutcome('draw');
+      else if (s.mode === 'hotseat') playOutcome('win');
+      else playOutcome(winner === s.humanColor ? 'win' : 'loss');
+    },
   });
 
   /** Reproduce la animacion y despues fija la vista definitiva. */
@@ -284,6 +294,7 @@ export const useGame = create<AppState>((set, get) => {
     orientation: 'w',
     flipEachTurn: true,
     showBalance: false,
+    soundOn: soundEnabled(),
     error: null,
 
     startLocal: (options) => {
@@ -379,6 +390,10 @@ export const useGame = create<AppState>((set, get) => {
 
     flipBoard: () => set((s) => ({ orientation: s.orientation === 'w' ? 'b' : 'w' })),
     setFlipEachTurn: (value) => set({ flipEachTurn: value }),
+    setSoundOn: (value) => {
+      setSoundEnabled(value);
+      set({ soundOn: value });
+    },
     toggleBalancePanel: () => set((s) => ({ showBalance: !s.showBalance })),
 
     clickSquare: (sq) => {

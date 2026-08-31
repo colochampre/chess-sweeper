@@ -1,6 +1,7 @@
-import type { Color, GameConfig, GameEvent, PieceType, Square } from '@cm/engine';
+import type { Color, GameConfig, GameEvent, GameStatus, PieceType, Square } from '@cm/engine';
 import { cellTransform, toCell } from '../coords.js';
 import { ANIM } from '../theme.js';
+import { playCapture, playExplosion, playHop, playPath } from '../sfx.js';
 import { pieceElement } from './pieceRefs.js';
 
 /** Lo que el reproductor necesita del store para ir mostrando el movimiento. */
@@ -14,6 +15,8 @@ export interface AnimApi {
   setBlasts(cells: Square[]): void;
   burnCells(cells: Square[], center: Square): void;
   reveal(cells: Square[]): void;
+  /** El store decide si para este jugador es victoria, derrota o tablas. */
+  gameEnd(status: GameStatus, winner: Color | null): void;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -26,6 +29,8 @@ async function animateHops(
   api: AnimApi,
 ): Promise<void> {
   const last = cells[cells.length - 1];
+  playPath(cells.length, ANIM.hop);
+
   const el = pieceElement(pieceId);
   if (!el || typeof el.animate !== 'function') {
     api.setPieceSquare(pieceId, last);
@@ -33,8 +38,11 @@ async function animateHops(
     return;
   }
 
-  const orientation = api.orientation();
-  const points = [from, ...cells].map((sq) => toCell(sq, api.config, orientation));
+  const points = [from, ...cells].map((sq) => toCell(sq, api.config));
+  // El tablero de las negras esta rotado 180 grados por CSS, asi que el arco tiene que
+  // ir hacia abajo en coordenadas del tablero para verse hacia arriba en pantalla.
+  const arc = api.orientation() === 'w' ? -30 : 30;
+
   const frames: Keyframe[] = [
     { transform: cellTransform(points[0]), offset: 0, easing: 'ease-out' },
   ];
@@ -42,8 +50,7 @@ async function animateHops(
     const a = points[i - 1];
     const b = points[i];
     frames.push({
-      // Punto mas alto del salto: a medio camino y 30% por encima.
-      transform: `translate(${((a.col + b.col) / 2) * 100}%, ${((a.row + b.row) / 2) * 100 - 30}%)`,
+      transform: `translate(${((a.col + b.col) / 2) * 100}%, ${((a.row + b.row) / 2) * 100 + arc}%)`,
       offset: (i - 0.5) / cells.length,
       easing: 'ease-in',
     });
@@ -88,11 +95,13 @@ export async function playEvents(events: GameEvent[], api: AnimApi): Promise<voi
 
     switch (ev.type) {
       case 'capture':
+        playCapture();
         api.markDying(ev.pieceId);
         await sleep(ANIM.capture);
         api.removePiece(ev.pieceId);
         break;
       case 'explosion':
+        playExplosion();
         api.burnCells(ev.cells, ev.center);
         api.setBlasts(ev.cells);
         for (const v of ev.victims) api.markDying(v.pieceId);
@@ -106,9 +115,11 @@ export async function playEvents(events: GameEvent[], api: AnimApi): Promise<voi
         await sleep(ANIM.reveal);
         break;
       case 'promotion':
+        playHop();
         api.promote(ev.pieceId, ev.to);
         break;
       case 'end':
+        api.gameEnd(ev.status, ev.winner);
         break;
     }
     i++;

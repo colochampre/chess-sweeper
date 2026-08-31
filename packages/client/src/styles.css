@@ -11,6 +11,7 @@
   --muted: #9b958c;
   --accent: #7fa650;
   --danger: #d4483b;
+  --flip: 560ms;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
@@ -186,8 +187,35 @@ button.ghost {
   aspect-ratio: var(--files) / var(--ranks);
   border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
+  /* Sombra simetrica: el tablero rota y una sombra con desplazamiento rotaria con el. */
+  box-shadow: 0 0 32px rgba(0, 0, 0, 0.55);
   user-select: none;
+  transform: rotate(0deg);
+  transition: transform var(--flip) cubic-bezier(0.66, 0, 0.34, 1);
+}
+
+/*
+ * Girar el tablero es rotarlo 180 grados y contrarrotar todo lo que tiene que seguir
+ * leyendose del derecho. Como el orden de las casillas en el DOM no cambia, el navegador
+ * puede interpolar el giro y las piezas parecen quedarse quietas mientras el tablero da
+ * la vuelta alrededor de ellas.
+ */
+.board.flipped {
+  transform: rotate(180deg);
+}
+.board .piece img,
+.board .number,
+.board .cell > img,
+.board .coord,
+.board .fog {
+  transition: transform var(--flip) cubic-bezier(0.66, 0, 0.34, 1);
+}
+.board.flipped .piece img,
+.board.flipped .number,
+.board.flipped .cell > img,
+.board.flipped .coord,
+.board.flipped .fog {
+  transform: rotate(180deg);
 }
 .cells {
   position: absolute;
@@ -216,8 +244,9 @@ button.ghost {
   background: rgba(255, 231, 79, 0.42);
 }
 .cell.selected {
+  /* Sin z-index a proposito: crearia un contexto de apilamiento y dejaria la insignia
+     numerica por debajo de la capa de piezas. */
   box-shadow: inset 0 0 0 4px rgba(255, 231, 79, 0.85);
-  z-index: 2;
 }
 /* La quemadura va por debajo de numeros e iconos para que sigan siendo legibles. */
 .cell.burnt::after {
@@ -237,6 +266,21 @@ button.ghost {
   line-height: 1;
   font-family: 'Consolas', 'Courier New', monospace;
 }
+/* Con pieza encima: insignia en una esquina, por encima de la capa de piezas. */
+.number.badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 9;
+  font-size: min(1.9vmin, 14px);
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  text-shadow: none;
+  pointer-events: none;
+}
+
 .cell .mine {
   position: relative;
   z-index: 3;

@@ -22,6 +22,8 @@ vuela por los aires con todo lo que tenga alrededor, sea tuyo o del rival.
 - **Si tu rey vuela, pierdes en el acto.** Si vuelan los dos a la vez, tablas.
 - **Clic derecho** para marcar una casilla con una bandera roja. Tus banderas son tuyas: el
   rival no las ve.
+- **El numero de una casilla se ve aunque tenga una pieza encima**: se encoge a una esquina
+  en lugar de esconderse. Saber cuantas minas rozan a tu propia torre importa.
 
 ## Arrancar
 
@@ -92,6 +94,17 @@ El cliente se limita a reproducir esa lista: los saltitos con la Web Animations 
 por casilla, sin librerias), la explosion como un fogonazo sobre el area y las bajas como un
 fundido. El servidor retransmite exactamente los mismos eventos, asi que las partidas en red
 se ven igual sin duplicar ni una regla.
+
+El sonido cuelga de los mismos eventos y **esta sintetizado con la Web Audio API**: no hay
+un solo archivo de audio en el repositorio. Un tic por saltito, el golpe de madera al
+aterrizar, un impacto grave al capturar, un estallido con barrido de filtro al detonar y un
+arpegio al terminar, ascendente o descendente segun como acabe. El recorrido entero se
+programa de una vez con el reloj de audio, no encadenando temporizadores. Se apaga desde el
+panel lateral y la preferencia se recuerda.
+
+Girar el tablero es rotar el contenedor 180 grados y contrarrotar piezas, numeros e iconos.
+Como el orden de las casillas en el DOM no cambia nunca, el navegador puede interpolar el
+giro: el tablero da la vuelta alrededor de las piezas, que se quedan derechas.
 
 ### Nadie puede hacer trampa
 
@@ -174,4 +187,3 @@ y cambia `PIECE_SET` en `packages/client/src/theme.ts`. Detalles en
   50 jugadas.
 - El online es para LAN: sin emparejamiento, sin reloj y sin persistencia entre reinicios
   del servidor.
-- Sin sonido.

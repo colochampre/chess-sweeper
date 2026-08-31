@@ -54,8 +54,13 @@ export function Board() {
                 s.rightClickSquare(sq);
               }}
             >
-              {revealed && !occupied.has(sq) && n > 0 && (
-                <span className="number" style={{ color: NUMBER_COLORS[n] }}>
+              {/* Con pieza encima el numero se encoge a una esquina en vez de esconderse:
+                  saber cuantas minas tocan la casilla de tu propia pieza es informacion util. */}
+              {revealed && n > 0 && (
+                <span
+                  className={occupied.has(sq) ? 'number badge' : 'number'}
+                  style={{ color: NUMBER_COLORS[n] }}
+                >
                   {n}
                 </span>
               )}

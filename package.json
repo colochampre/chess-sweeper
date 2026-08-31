@@ -1,0 +1,29 @@
+{
+  "name": "chess-minesweeper",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Ajedrez fusionado con Buscaminas: minas ocultas en las filas centrales, revelado en cascada y explosiones encadenadas.",
+  "workspaces": [
+    "packages/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @cm/client",
+    "build": "npm run build --workspace @cm/client",
+    "dev:server": "npm run dev --workspace @cm/server",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p packages/engine && tsc --noEmit -p packages/ai && tsc --noEmit -p packages/client && tsc --noEmit -p packages/server && tsc --noEmit -p tools/balance",
+    "balance": "tsx tools/balance/simulate.ts",
+    "start": "npm run build && npm run start --workspace @cm/server"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.8"
+  }
+}

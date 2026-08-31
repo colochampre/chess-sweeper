@@ -1,34 +1,31 @@
-import type { Color, GameConfig, Square } from '@cm/engine';
+import type { GameConfig, Square } from '@cm/engine';
 
 /**
  * Conversion entre indice de tablero y posicion en pantalla.
- * El jugador siempre ve sus piezas abajo: con `orientation: 'w'` la fila 1 queda
- * al pie del tablero; con `'b'` se invierte todo.
+ *
+ * El tablero se dibuja SIEMPRE con la fila 1 abajo. Que el jugador de negras vea sus
+ * piezas en la parte inferior se resuelve rotando el contenedor 180 grados por CSS y
+ * contrarrotando piezas, numeros e iconos. Asi el orden de las casillas en el DOM nunca
+ * cambia, que es lo que permite animar el giro en vez de que el tablero salte de golpe.
  */
 export interface Cell {
   col: number;
   row: number;
 }
 
-export function toCell(sq: Square, c: GameConfig, orientation: Color): Cell {
-  const file = sq % c.files;
-  const rank = Math.floor(sq / c.files);
-  return orientation === 'w'
-    ? { col: file, row: c.ranks - 1 - rank }
-    : { col: c.files - 1 - file, row: rank };
+export function toCell(sq: Square, c: GameConfig): Cell {
+  return { col: sq % c.files, row: c.ranks - 1 - Math.floor(sq / c.files) };
 }
 
-export function toSquare(cell: Cell, c: GameConfig, orientation: Color): Square {
-  const file = orientation === 'w' ? cell.col : c.files - 1 - cell.col;
-  const rank = orientation === 'w' ? c.ranks - 1 - cell.row : cell.row;
-  return rank * c.files + file;
+export function toSquare(cell: Cell, c: GameConfig): Square {
+  return (c.ranks - 1 - cell.row) * c.files + cell.col;
 }
 
-/** Casillas en el orden en que se pintan de arriba a abajo y de izquierda a derecha. */
-export function displayOrder(c: GameConfig, orientation: Color): Square[] {
+/** Casillas en el orden en que se pintan, de arriba a abajo y de izquierda a derecha. */
+export function displayOrder(c: GameConfig): Square[] {
   const out: Square[] = [];
   for (let row = 0; row < c.ranks; row++) {
-    for (let col = 0; col < c.files; col++) out.push(toSquare({ col, row }, c, orientation));
+    for (let col = 0; col < c.files; col++) out.push(toSquare({ col, row }, c));
   }
   return out;
 }

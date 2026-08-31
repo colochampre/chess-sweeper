@@ -33,8 +33,11 @@ async function animateHops(
     return;
   }
 
-  const orientation = api.orientation();
-  const points = [from, ...cells].map((sq) => toCell(sq, api.config, orientation));
+  const points = [from, ...cells].map((sq) => toCell(sq, api.config));
+  // El tablero de las negras esta rotado 180 grados por CSS, asi que el arco tiene que
+  // ir hacia abajo en coordenadas del tablero para verse hacia arriba en pantalla.
+  const arc = api.orientation() === 'w' ? -30 : 30;
+
   const frames: Keyframe[] = [
     { transform: cellTransform(points[0]), offset: 0, easing: 'ease-out' },
   ];
@@ -42,8 +45,7 @@ async function animateHops(
     const a = points[i - 1];
     const b = points[i];
     frames.push({
-      // Punto mas alto del salto: a medio camino y 30% por encima.
-      transform: `translate(${((a.col + b.col) / 2) * 100}%, ${((a.row + b.row) / 2) * 100 - 30}%)`,
+      transform: `translate(${((a.col + b.col) / 2) * 100}%, ${((a.row + b.row) / 2) * 100 + arc}%)`,
       offset: (i - 0.5) / cells.length,
       easing: 'ease-in',
     });

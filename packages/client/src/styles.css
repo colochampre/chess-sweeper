@@ -11,6 +11,7 @@
   --muted: #9b958c;
   --accent: #7fa650;
   --danger: #d4483b;
+  --flip: 560ms;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
@@ -186,8 +187,35 @@ button.ghost {
   aspect-ratio: var(--files) / var(--ranks);
   border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
+  /* Sombra simetrica: el tablero rota y una sombra con desplazamiento rotaria con el. */
+  box-shadow: 0 0 32px rgba(0, 0, 0, 0.55);
   user-select: none;
+  transform: rotate(0deg);
+  transition: transform var(--flip) cubic-bezier(0.66, 0, 0.34, 1);
+}
+
+/*
+ * Girar el tablero es rotarlo 180 grados y contrarrotar todo lo que tiene que seguir
+ * leyendose del derecho. Como el orden de las casillas en el DOM no cambia, el navegador
+ * puede interpolar el giro y las piezas parecen quedarse quietas mientras el tablero da
+ * la vuelta alrededor de ellas.
+ */
+.board.flipped {
+  transform: rotate(180deg);
+}
+.board .piece img,
+.board .number,
+.board .cell > img,
+.board .coord,
+.board .fog {
+  transition: transform var(--flip) cubic-bezier(0.66, 0, 0.34, 1);
+}
+.board.flipped .piece img,
+.board.flipped .number,
+.board.flipped .cell > img,
+.board.flipped .coord,
+.board.flipped .fog {
+  transform: rotate(180deg);
 }
 .cells {
   position: absolute;

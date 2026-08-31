@@ -10,14 +10,15 @@ export function Board() {
   if (view === null) return null;
 
   const c = view.config;
-  const order = displayOrder(c, s.orientation);
+  // Siempre se dibuja con la fila 1 abajo; girar el tablero es cosa del CSS.
+  const order = displayOrder(c);
   const blasts = new Set(s.blasts);
   const targets = new Set(s.targets);
   // Ocupacion segun lo que se ve ahora, no segun el estado final del motor.
   const occupied = new Set(s.pieces.map((p) => p.sq));
 
   const label = (sq: Square): { file?: string; rank?: string } => {
-    const cell = toCell(sq, c, s.orientation);
+    const cell = toCell(sq, c);
     return {
       file: cell.row === c.ranks - 1 ? String.fromCharCode(97 + (sq % c.files)) : undefined,
       rank: cell.col === 0 ? String(Math.floor(sq / c.files) + 1) : undefined,
@@ -26,7 +27,7 @@ export function Board() {
 
   return (
     <div
-      className="board"
+      className={`board${s.orientation === 'b' ? ' flipped' : ''}`}
       style={{ ['--files' as string]: c.files, ['--ranks' as string]: c.ranks }}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -34,6 +35,7 @@ export function Board() {
         {order.map((sq) => {
           const revealed = s.revealed[sq];
           const n = s.adjacency[sq];
+          const hasPiece = occupied.has(sq);
           const { file, rank } = label(sq);
           return (
             <div
@@ -58,7 +60,7 @@ export function Board() {
                   saber cuantas minas tocan la casilla de tu propia pieza es informacion util. */}
               {revealed && n > 0 && (
                 <span
-                  className={occupied.has(sq) ? 'number badge' : 'number'}
+                  className={hasPiece ? 'number badge' : 'number'}
                   style={{ color: NUMBER_COLORS[n] }}
                 >
                   {n}
@@ -67,9 +69,7 @@ export function Board() {
               {s.craters[sq] && <img className="mine" src={MINE_SRC} alt="mina" />}
               {!revealed && <div className="fog" />}
               {!revealed && s.flags[sq] && <img className="flag" src={FLAG_SRC} alt="bandera" />}
-              {targets.has(sq) && (
-                <div className={occupied.has(sq) ? 'target-ring' : 'target-dot'} />
-              )}
+              {targets.has(sq) && <div className={hasPiece ? 'target-ring' : 'target-dot'} />}
               {file && <span className="coord file">{file}</span>}
               {rank && <span className="coord rank">{rank}</span>}
             </div>
@@ -83,7 +83,7 @@ export function Board() {
             key={p.id}
             ref={(el) => registerPiece(p.id, el)}
             className={`piece${s.dying.includes(p.id) ? ' dying' : ''}`}
-            style={{ transform: cellTransform(toCell(p.sq, c, s.orientation)) }}
+            style={{ transform: cellTransform(toCell(p.sq, c)) }}
           >
             <img src={pieceSrc(p.type, p.color)} alt={`${p.color}${p.type}`} draggable={false} />
           </div>
@@ -95,7 +95,7 @@ export function Board() {
           <div
             key={sq}
             className="blast-cell"
-            style={{ transform: cellTransform(toCell(sq, c, s.orientation)) }}
+            style={{ transform: cellTransform(toCell(sq, c)) }}
           />
         ))}
       </div>

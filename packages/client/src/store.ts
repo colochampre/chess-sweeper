@@ -18,10 +18,11 @@ import {
   type PlayerView,
   type RoomSettings,
   type ServerMessage,
+  normalizeRoomCode,
   type Square,
 } from '@cm/engine';
 import { playEvents, type AnimApi } from './anim/eventPlayer.js';
-import { OnlineClient, clearSeat, defaultServerUrl, loadSeat, saveSeat } from './online.js';
+import { OnlineClient, clearSeat, loadSeat, saveSeat } from './online.js';
 import { playOutcome, setSoundEnabled, soundEnabled } from './sfx.js';
 import { ANIM } from './theme.js';
 
@@ -251,14 +252,9 @@ export const useGame = create<AppState>((set, get) => {
 
   const ensureSocket = (): OnlineClient => {
     if (socket === null) {
-      socket = new OnlineClient(defaultServerUrl(), {
+      socket = new OnlineClient({
         onMessage: onServerMessage,
-        onOpen: (reconnected) => {
-          set({ online: { ...get().online, connected: true } });
-          // Tras una caida hay que reclamar el asiento antes que nada.
-          const seat = reconnected ? loadSeat() : null;
-          if (seat) socket?.send({ t: 'resume', code: seat.code, token: seat.token });
-        },
+        onOpen: () => set({ online: { ...get().online, connected: true } }),
         onClose: () => set({ online: { ...get().online, connected: false } }),
       });
     }
@@ -344,28 +340,23 @@ export const useGame = create<AppState>((set, get) => {
       });
     },
 
+    // A que sala se entra viaja en la URL de la conexion, no como mensaje: es lo que
+    // permite al servidor enrutar hacia la sala antes de aceptar el socket.
     hostOnline: (settings) => {
       set({ screen: 'lobby', mode: 'online', error: null });
-      // `send` encola si todavia no hay socket abierto, asi que no hace falta esperar.
-      const client = ensureSocket();
-      if (!client.connected) client.connect();
-      client.send({ t: 'create', settings });
+      ensureSocket().connect({ a: 'create', ...settings });
     },
 
     joinOnline: (code) => {
       set({ screen: 'lobby', mode: 'online', error: null });
-      const client = ensureSocket();
-      if (!client.connected) client.connect();
-      client.send({ t: 'join', code });
+      ensureSocket().connect({ a: 'join', code: normalizeRoomCode(code) });
     },
 
     resumeOnline: () => {
       const seat = loadSeat();
       if (seat === null) return false;
       set({ screen: 'lobby', mode: 'online', error: null });
-      const client = ensureSocket();
-      if (!client.connected) client.connect();
-      client.send({ t: 'resume', code: seat.code, token: seat.token });
+      ensureSocket().connect({ a: 'resume', code: seat.code, token: seat.token });
       return true;
     },
 

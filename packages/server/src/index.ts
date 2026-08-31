@@ -1,11 +1,13 @@
 /**
- * Servidor de partidas en LAN. Autoritativo: las minas solo existen aqui.
+ * Servidor de partidas para desarrollo y para jugar en LAN.
  *
  *   npm run dev:server            # escucha en 0.0.0.0:8787
  *   PORT=9000 npm run dev:server
  *
- * Si `packages/client/dist` existe, tambien lo sirve como estatico, de modo que una
- * partida en la red local se levanta con un unico comando.
+ * En produccion el que manda es el Worker de Cloudflare (`packages/worker`). Los dos
+ * comparten la logica de sala de `@cm/engine`; aqui solo esta el pegamento de Node.
+ * Si `packages/client/dist` existe, tambien lo sirve, asi que una partida en la red local
+ * se levanta con un unico comando.
  */
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -13,15 +15,34 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
-  normalizeRoomCode,
+  ROOM_TTL_MS,
+  WS_PATH,
+  createRoom,
+  generateRoomCode,
+  isRoomError,
+  isStale,
+  markDisconnected,
+  opponentOf,
+  parseIntent,
+  playMove,
+  rematch,
+  resumeSeat,
+  takeSeat,
+  viewFor,
   type ClientMessage,
   type Color,
+  type RoomState,
+  type Seat,
   type ServerMessage,
 } from '@cm/engine';
-import { RoomStore, type Room } from './rooms.js';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const CLIENT_DIST = fileURLToPath(new URL('../../client/dist', import.meta.url));
+
+/** Tope de tamano por mensaje: un movimiento son unas decenas de bytes. */
+const MAX_MESSAGE_BYTES = 4 * 1024;
+/** Cada cuanto se comprueba que las conexiones siguen vivas. */
+const HEARTBEAT_MS = 30_000;
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -33,7 +54,6 @@ const MIME: Record<string, string> = {
   '.ico': 'image/x-icon',
 };
 
-/** AC-402: sirve el cliente compilado si esta disponible. */
 function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   if (!existsSync(CLIENT_DIST)) {
     res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
@@ -45,196 +65,183 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
   const relative = normalize(decodeURIComponent(url)).replace(/^(\.\.[/\\])+/, '');
   let file = join(CLIENT_DIST, relative);
   if (!file.startsWith(CLIENT_DIST) || !existsSync(file) || statSync(file).isDirectory()) {
-    file = join(CLIENT_DIST, 'index.html'); // SPA
+    file = join(CLIENT_DIST, 'index.html');
   }
   res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
   createReadStream(file).pipe(res);
 }
 
-const rooms = new RoomStore();
-const http = createServer(serveStatic);
-const wss = new WebSocketServer({ server: http });
-
-interface Session {
-  room?: Room;
-  color?: Color;
-}
-
-const sessions = new Map<WebSocket, Session>();
+const rooms = new Map<string, RoomState>();
 /** Sockets sentados en cada sala, para poder difundir. */
 const members = new Map<string, Map<Color, WebSocket>>();
+
+interface Session {
+  room: RoomState;
+  color: Color;
+  alive: boolean;
+}
+const sessions = new Map<WebSocket, Session>();
 
 const send = (socket: WebSocket, message: ServerMessage): void => {
   if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
 };
-
 const fail = (socket: WebSocket, message: string): void => send(socket, { t: 'error', message });
 
-function seatSocket(socket: WebSocket, room: Room, color: Color): void {
+function broadcastPresence(room: RoomState): void {
+  for (const color of ['w', 'b'] as const) {
+    const socket = members.get(room.code)?.get(color);
+    if (!socket) continue;
+    send(socket, { t: 'opponent', connected: room.seats[opponentOf(color)]?.connected === true });
+  }
+}
+
+function seat(socket: WebSocket, room: RoomState, taken: Seat): void {
+  const { color, token } = taken;
   const roomMembers = members.get(room.code) ?? new Map<Color, WebSocket>();
   const previous = roomMembers.get(color);
   if (previous && previous !== socket) previous.close(4001, 'Sesion reemplazada');
   roomMembers.set(color, socket);
   members.set(room.code, roomMembers);
-  sessions.set(socket, { room, color });
+  sessions.set(socket, { room, color, alive: true });
+  send(socket, { t: 'seated', code: room.code, color, token, view: viewFor(room, color) });
+  broadcastPresence(room);
 }
 
-function opponentSocket(room: Room, color: Color): WebSocket | undefined {
-  return members.get(room.code)?.get(color === 'w' ? 'b' : 'w');
-}
+const server = createServer(serveStatic);
+const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
 
-function broadcastPresence(room: Room): void {
-  for (const color of ['w', 'b'] as const) {
-    const socket = members.get(room.code)?.get(color);
-    if (!socket) continue;
-    const other = room.seats.get(color === 'w' ? 'b' : 'w');
-    send(socket, { t: 'opponent', connected: other?.connected === true });
+server.on('upgrade', (req, socket, head) => {
+  const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+  if (url.pathname !== WS_PATH) return socket.destroy();
+
+  // En LAN no se exige `Origin`, pero si viene tiene que ser del mismo host.
+  const origin = req.headers.origin;
+  if (origin !== undefined) {
+    try {
+      if (new URL(origin).host !== req.headers.host) return socket.destroy();
+    } catch {
+      return socket.destroy();
+    }
   }
-}
 
-function handle(socket: WebSocket, message: ClientMessage): void {
-  const session = sessions.get(socket) ?? {};
+  const intent = parseIntent(url.searchParams);
+  if (intent === null) return socket.destroy();
 
-  switch (message.t) {
-    case 'create': {
-      const { room, seat } = rooms.create(message.settings);
-      seatSocket(socket, room, seat.color);
-      send(socket, {
-        t: 'seated',
-        code: room.code,
-        color: seat.color,
-        token: seat.token,
-        view: rooms.viewFor(room, seat.color), // AC-201/204
-      });
-      broadcastPresence(room);
-      return;
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    if (intent.a === 'create') {
+      let code = generateRoomCode();
+      while (rooms.has(code)) code = generateRoomCode();
+      const room = createRoom(code, intent);
+      rooms.set(code, room);
+      const taken = takeSeat(room);
+      if (isRoomError(taken)) return fail(ws, taken.error);
+      return seat(ws, room, taken);
     }
 
-    case 'join': {
-      const result = rooms.join(normalizeRoomCode(message.code));
-      if ('error' in result) return fail(socket, result.error); // AC-103
-      seatSocket(socket, result.room, result.seat.color);
-      send(socket, {
-        t: 'seated',
-        code: result.room.code,
-        color: result.seat.color,
-        token: result.seat.token, // AC-301
-        view: rooms.viewFor(result.room, result.seat.color),
-      });
-      broadcastPresence(result.room);
-      return;
-    }
+    const room = rooms.get(intent.code);
+    if (room === undefined) return fail(ws, 'No existe ninguna sala con ese codigo');
 
-    case 'resume': {
-      const result = rooms.resume(normalizeRoomCode(message.code), message.token);
-      if ('error' in result) return fail(socket, result.error); // AC-303
-      seatSocket(socket, result.room, result.seat.color);
-      send(socket, {
-        t: 'seated',
-        code: result.room.code,
-        color: result.seat.color,
-        token: result.seat.token,
-        view: rooms.viewFor(result.room, result.seat.color), // AC-302
-      });
-      broadcastPresence(result.room);
-      return;
-    }
-
-    case 'move': {
-      const { room, color } = session;
-      if (!room || !color) return fail(socket, 'No estas sentado en ninguna sala');
-      const result = rooms.play(room, color, message.move);
-      if ('error' in result) {
-        fail(socket, result.error);
-        send(socket, { t: 'sync', view: rooms.viewFor(room, color) }); // resincroniza al que fallo
-        return;
-      }
-      for (const seatColor of ['w', 'b'] as const) {
-        const target = members.get(room.code)?.get(seatColor);
-        if (target) {
-          send(target, { t: 'moved', events: result.events, view: rooms.viewFor(room, seatColor) });
-        }
-      }
-      return;
-    }
-
-    case 'rematch': {
-      const { room } = session;
-      if (!room) return fail(socket, 'No estas sentado en ninguna sala');
-      rooms.rematch(room);
-      // Los colores se intercambian: cada socket se resienta en el suyo.
-      const roomMembers = members.get(room.code);
-      if (roomMembers) {
-        const swapped = new Map<Color, WebSocket>();
-        for (const [color, member] of roomMembers) swapped.set(color === 'w' ? 'b' : 'w', member);
-        members.set(room.code, swapped);
-        for (const [color, member] of swapped) {
-          sessions.set(member, { room, color });
-          send(member, {
-            t: 'seated',
-            code: room.code,
-            color,
-            token: room.seats.get(color)?.token ?? '',
-            view: rooms.viewFor(room, color),
-          });
-        }
-      }
-      return;
-    }
-
-    case 'leave': {
-      const { room, color } = session;
-      if (room && color) {
-        rooms.disconnect(room, color);
-        members.get(room.code)?.delete(color);
-        broadcastPresence(room);
-      }
-      sessions.delete(socket);
-      return;
-    }
-
-    default:
-      fail(socket, 'Mensaje desconocido');
-  }
-}
+    const taken = intent.a === 'join' ? takeSeat(room) : resumeSeat(room, intent.token);
+    if (isRoomError(taken)) return fail(ws, taken.error);
+    seat(ws, room, taken);
+  });
+});
 
 wss.on('connection', (socket) => {
-  sessions.set(socket, {});
+  socket.on('pong', () => {
+    const session = sessions.get(socket);
+    if (session) session.alive = true;
+  });
 
   socket.on('message', (raw) => {
+    const session = sessions.get(socket);
+    if (!session) return fail(socket, 'No estas sentado en ninguna sala');
+
     let message: ClientMessage;
     try {
       message = JSON.parse(String(raw)) as ClientMessage;
     } catch {
-      return fail(socket, 'Mensaje mal formado'); // AC-403
+      return fail(socket, 'Mensaje mal formado');
     }
-    try {
-      handle(socket, message);
-    } catch (err) {
-      console.error('Error atendiendo mensaje:', err);
-      fail(socket, 'Error interno del servidor'); // AC-403
+
+    const { room, color } = session;
+    switch (message?.t) {
+      case 'move': {
+        const result = playMove(room, color, message.move);
+        if (isRoomError(result)) {
+          fail(socket, result.error);
+          return send(socket, { t: 'sync', view: viewFor(room, color) });
+        }
+        for (const seatColor of ['w', 'b'] as const) {
+          const target = members.get(room.code)?.get(seatColor);
+          if (target) {
+            send(target, { t: 'moved', events: result.events, view: viewFor(room, seatColor) });
+          }
+        }
+        return;
+      }
+      case 'rematch': {
+        rematch(room);
+        // Los colores se intercambian: cada socket se resienta en el suyo.
+        const roomMembers = members.get(room.code);
+        if (!roomMembers) return;
+        const swapped = new Map<Color, WebSocket>();
+        for (const [c, member] of roomMembers) swapped.set(opponentOf(c), member);
+        members.set(room.code, swapped);
+        for (const [c, member] of swapped) {
+          sessions.set(member, { room, color: c, alive: true });
+          send(member, {
+            t: 'seated',
+            code: room.code,
+            color: c,
+            token: room.seats[c]?.token ?? '',
+            view: viewFor(room, c),
+          });
+        }
+        return;
+      }
+      case 'leave':
+        socket.close(1000, 'Salida voluntaria');
+        return;
+      default:
+        fail(socket, 'Mensaje desconocido');
     }
   });
 
   socket.on('close', () => {
-    const session = sessions.get(socket);
-    if (session?.room && session.color) {
-      rooms.disconnect(session.room, session.color);
-      const roomMembers = members.get(session.room.code);
-      if (roomMembers?.get(session.color) === socket) roomMembers.delete(session.color);
-      broadcastPresence(session.room);
+    const current = sessions.get(socket);
+    if (current) {
+      markDisconnected(current.room, current.color);
+      const roomMembers = members.get(current.room.code);
+      if (roomMembers?.get(current.color) === socket) roomMembers.delete(current.color);
+      broadcastPresence(current.room);
     }
     sessions.delete(socket);
   });
 });
 
+// Conexiones muertas: sin esto, un cliente que desaparece sin cerrar deja al rival esperando.
 setInterval(() => {
-  const removed = rooms.sweep();
-  if (removed > 0) console.log(`Salas descartadas por inactividad: ${removed}`);
-}, 60_000).unref();
+  for (const [socket, session] of sessions) {
+    if (!session.alive) {
+      socket.terminate();
+      continue;
+    }
+    session.alive = false;
+    socket.ping();
+  }
+}, HEARTBEAT_MS).unref();
 
-// AC-401: escucha en todas las interfaces para que se vea desde la LAN.
-http.listen(PORT, '0.0.0.0', () => {
+setInterval(() => {
+  for (const [code, room] of rooms) {
+    if (isStale(room)) {
+      rooms.delete(code);
+      members.delete(code);
+    }
+  }
+}, ROOM_TTL_MS).unref();
+
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Chess Minesweeper — servidor en http://0.0.0.0:${PORT}`);
   if (!existsSync(CLIENT_DIST)) {
     console.log('Sin cliente compilado: ejecuta `npm run build` para servirlo desde aqui.');

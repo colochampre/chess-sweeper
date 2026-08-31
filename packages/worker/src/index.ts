@@ -54,6 +54,8 @@ const encode = (message: ServerMessage): string => JSON.stringify(message);
 
 interface Attachment {
   color: Color;
+  /** Identifica esta conexion concreta; ver `markDisconnected` en el motor. */
+  session: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,9 +138,12 @@ export class Room implements DurableObject {
     await this.ctx.storage.setAlarm(Date.now() + ROOM_TTL_MS + 60_000);
   }
 
+  private attachmentOf(ws: WebSocket): Attachment | null {
+    return (ws.deserializeAttachment() as Attachment | null) ?? null;
+  }
+
   private colorOf(ws: WebSocket): Color | null {
-    const attachment = ws.deserializeAttachment() as Attachment | null;
-    return attachment?.color ?? null;
+    return this.attachmentOf(ws)?.color ?? null;
   }
 
   private socketFor(color: Color): WebSocket | undefined {
@@ -210,7 +215,7 @@ export class Room implements DurableObject {
     const [client, server] = Object.values(pair);
     // Hibernacion: el objeto puede dormirse con el socket abierto sin gastar computo.
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ color: seat.color } satisfies Attachment);
+    server.serializeAttachment({ color: seat.color, session: seat.session } satisfies Attachment);
 
     server.send(
       encode({
@@ -278,7 +283,11 @@ export class Room implements DurableObject {
           const previous = this.colorOf(socket);
           if (previous === null) continue;
           const next = opponentOf(previous);
-          socket.serializeAttachment({ color: next } satisfies Attachment);
+          const session = this.attachmentOf(socket)?.session ?? '';
+          this.room.seats[next] = this.room.seats[next]
+            ? { ...this.room.seats[next]!, session }
+            : this.room.seats[next];
+          socket.serializeAttachment({ color: next, session } satisfies Attachment);
           socket.send(
             encode({
               t: 'seated',
@@ -302,12 +311,12 @@ export class Room implements DurableObject {
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
-    const color = this.colorOf(ws);
-    if (color !== null && this.room !== null) {
-      markDisconnected(this.room, color);
-      this.broadcastPresence();
-      await this.save();
-    }
+    const attachment = this.attachmentOf(ws);
+    if (attachment === null || this.room === null) return;
+    // Si esta conexion ya habia sido reemplazada por otra, su cierre no significa nada.
+    if (!markDisconnected(this.room, attachment.color, attachment.session)) return;
+    this.broadcastPresence();
+    await this.save();
   }
 
   async webSocketError(ws: WebSocket): Promise<void> {

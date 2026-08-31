@@ -78,6 +78,8 @@ const members = new Map<string, Map<Color, WebSocket>>();
 interface Session {
   room: RoomState;
   color: Color;
+  /** Identifica esta conexion; ver `markDisconnected` en el motor. */
+  session: string;
   alive: boolean;
 }
 const sessions = new Map<WebSocket, Session>();
@@ -96,13 +98,13 @@ function broadcastPresence(room: RoomState): void {
 }
 
 function seat(socket: WebSocket, room: RoomState, taken: Seat): void {
-  const { color, token } = taken;
+  const { color, token, session } = taken;
   const roomMembers = members.get(room.code) ?? new Map<Color, WebSocket>();
   const previous = roomMembers.get(color);
   if (previous && previous !== socket) previous.close(4001, 'Sesion reemplazada');
   roomMembers.set(color, socket);
   members.set(room.code, roomMembers);
-  sessions.set(socket, { room, color, alive: true });
+  sessions.set(socket, { room, color, session, alive: true });
   send(socket, { t: 'seated', code: room.code, color, token, view: viewFor(room, color) });
   broadcastPresence(room);
 }
@@ -189,7 +191,8 @@ wss.on('connection', (socket) => {
         for (const [c, member] of roomMembers) swapped.set(opponentOf(c), member);
         members.set(room.code, swapped);
         for (const [c, member] of swapped) {
-          sessions.set(member, { room, color: c, alive: true });
+          const session = room.seats[c]?.session ?? '';
+          sessions.set(member, { room, color: c, session, alive: true });
           send(member, {
             t: 'seated',
             code: room.code,
@@ -211,10 +214,12 @@ wss.on('connection', (socket) => {
   socket.on('close', () => {
     const current = sessions.get(socket);
     if (current) {
-      markDisconnected(current.room, current.color);
       const roomMembers = members.get(current.room.code);
       if (roomMembers?.get(current.color) === socket) roomMembers.delete(current.color);
-      broadcastPresence(current.room);
+      // Solo cuenta si esta conexion no habia sido ya reemplazada por otra.
+      if (markDisconnected(current.room, current.color, current.session)) {
+        broadcastPresence(current.room);
+      }
     }
     sessions.delete(socket);
   });

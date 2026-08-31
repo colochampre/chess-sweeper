@@ -118,8 +118,27 @@ describe('FR-3 reconexion', () => {
   it('AC-304: al desconectar, el asiento queda marcado', () => {
     const r = room();
     const seat = seatOf(takeSeat(r));
-    markDisconnected(r, seat.color);
+    expect(markDisconnected(r, seat.color, seat.session)).toBe(true);
     expect(r.seats[seat.color]?.connected).toBe(false);
+  });
+
+  it('AC-305: el cierre de una conexion ya reemplazada no marca ausencia', () => {
+    const r = room();
+    const first = seatOf(takeSeat(r));
+    const staleSession = first.session;
+
+    // El jugador reconecta: se sienta una sesion nueva en el mismo asiento.
+    const resumed = seatOf(resumeSeat(r, first.token));
+    expect(resumed.session).not.toBe(staleSession);
+
+    // Y ahora llega, tarde, el cierre del socket viejo. No debe echarle de la sala:
+    // sin esto, reconectar te deja invisible para tu rival.
+    expect(markDisconnected(r, resumed.color, staleSession)).toBe(false);
+    expect(r.seats[resumed.color]?.connected).toBe(true);
+
+    // El cierre de la sesion vigente si cuenta.
+    expect(markDisconnected(r, resumed.color, resumed.session)).toBe(true);
+    expect(r.seats[resumed.color]?.connected).toBe(false);
   });
 
   it('la revancha intercambia los colores y reparte minas nuevas', () => {

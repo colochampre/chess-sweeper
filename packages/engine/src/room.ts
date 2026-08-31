@@ -20,6 +20,13 @@ export interface Seat {
   /** Credencial del asiento: permite recuperarlo tras una desconexion. */
   token: string;
   connected: boolean;
+  /**
+   * Identifica la conexion vigente. Al reconectar o abrir otra pestana se sienta una
+   * sesion nueva y se echa a la anterior; el cierre de esa conexion vieja llega DESPUES
+   * y no debe marcar el asiento como ausente. Sin esto, reconectarse te deja invisible
+   * para tu rival.
+   */
+  session: string;
 }
 
 export interface RoomState {
@@ -82,7 +89,7 @@ export function takeSeat(
     : wanted;
   if (color === undefined) return { error: 'La sala ya esta completa' };
 
-  const seat: Seat = { color, token: newToken(), connected: true };
+  const seat: Seat = { color, token: newToken(), connected: true, session: newToken() };
   room.seats[color] = seat;
   room.lastActivity = now;
   return seat;
@@ -93,6 +100,7 @@ export function resumeSeat(room: RoomState, token: string, now = Date.now()): Se
   for (const seat of Object.values(room.seats)) {
     if (seat && seat.token === token) {
       seat.connected = true;
+      seat.session = newToken(); // conexion nueva: la anterior deja de mandar
       room.lastActivity = now;
       return seat;
     }
@@ -137,10 +145,21 @@ export function rematch(room: RoomState, now = Date.now()): void {
 /** Proyeccion que se envia a un jugador. Nunca incluye el campo de minas. */
 export const viewFor = (room: RoomState, color: Color): PlayerView => toView(room.game, color);
 
-export function markDisconnected(room: RoomState, color: Color, now = Date.now()): void {
+/**
+ * Marca el asiento como ausente, pero solo si quien se va es la conexion vigente.
+ * Devuelve si ha cambiado algo, para no difundir presencia de mas.
+ */
+export function markDisconnected(
+  room: RoomState,
+  color: Color,
+  session: string,
+  now = Date.now(),
+): boolean {
   const seat = room.seats[color];
-  if (seat) seat.connected = false;
+  if (!seat || seat.session !== session) return false;
+  seat.connected = false;
   room.lastActivity = now;
+  return true;
 }
 
 export const opponentOf = (color: Color): Color => (color === 'w' ? 'b' : 'w');

@@ -7,7 +7,7 @@ import { loadSeat } from '../online.js';
 const MODES: { value: Mode; label: string; hint: string }[] = [
   { value: 'hotseat', label: 'Dos jugadores', hint: 'Mismo dispositivo, el tablero gira en cada turno' },
   { value: 'bot', label: 'Contra la maquina', hint: 'Elige la fuerza del rival' },
-  { value: 'online', label: 'Online (LAN)', hint: 'Crea una sala o entra con un codigo' },
+  { value: 'online', label: 'Online', hint: 'Crea una sala o entra con un codigo' },
 ];
 
 const DIFFICULTIES: { value: Difficulty; label: string }[] = [
@@ -164,8 +164,8 @@ export function Menu() {
             </button>
           )}
           <p className="hint">
-            El servidor se levanta con <code>npm run dev:server</code>. Los demas jugadores entran
-            por la IP de tu equipo en la red local.
+            Crea una sala y pasale el codigo a tu rival. En local, el servidor se levanta con{' '}
+            <code>npm run dev:worker</code>.
           </p>
         </section>
       ) : (

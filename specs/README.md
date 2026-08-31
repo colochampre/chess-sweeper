@@ -17,7 +17,7 @@ grep -rn "AC-5" packages/*/tests    # que cubre el criterio AC-5xx
 |---|---|---|---|
 | [001-core-rules](001-core-rules/spec.md) | Tablero, minas, revelado, trayecto, explosiones, fin de partida, eventos, informacion oculta | `@cm/engine` | 46 |
 | [002-ai](002-ai/spec.md) | Creencia sobre las minas, riesgo por movimiento, niveles de dificultad | `@cm/ai` | 21 |
-| [003-online](003-online/spec.md) | Salas, autoridad del servidor, reconexion, servicio | `@cm/server` | 12 |
+| [003-online](003-online/spec.md) | Salas, autoridad del servidor, reconexion, parametros de conexion, Durable Objects | `@cm/engine` + `@cm/worker` + `@cm/server` | 16 |
 
 ## Como anadir una feature
 
@@ -27,9 +27,13 @@ grep -rn "AC-5" packages/*/tests    # que cubre el criterio AC-5xx
 4. Si al implementar descubres que un AC estaba mal planteado, **corrige el spec**: la
    especificacion es parte del entregable, no un documento de arranque que se abandona.
 
-Ha pasado ya una vez: el AC-802 decia que la captura se emitia *antes* del salto de
-aterrizaje, y al montar la animacion quedo claro que tenia que ser justo *despues*. Se
-cambio el spec, no el test.
+Ha pasado ya dos veces:
+
+- El **AC-802** decia que la captura se emitia *antes* del salto de aterrizaje, y al montar la
+  animacion quedo claro que tenia que ser justo *despues*. Se cambio el spec, no el test.
+- El **AC-305** no existia hasta que, probando el Worker en local, dos jugadores reconectados
+  se veian mutuamente ausentes: el cierre tardio de un socket ya reemplazado marcaba el
+  asiento como vacio. Primero se escribio el criterio, luego el test, y luego el arreglo.
 
 ## Decisiones de diseno que fijan estos specs
 

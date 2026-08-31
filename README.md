@@ -36,28 +36,34 @@ npm run dev          # cliente en http://localhost:5173
 |---|---|
 | `npm run dev` | Cliente en modo desarrollo |
 | `npm run build` | Compila el cliente en `packages/client/dist` |
-| `npm run dev:server` | Servidor de partidas en LAN, en el puerto 8787 |
+| `npm run dev:worker` | Worker de Cloudflare en local (Durable Objects incluidos) |
+| `npm run dev:server` | Servidor de Node para jugar en LAN, en el puerto 8787 |
+| `npm run deploy` | Compila el cliente y publica el Worker en Cloudflare |
 | `npm test` | Toda la bateria de tests |
 | `npm run typecheck` | Comprobacion de tipos de todos los paquetes |
 | `npm run balance` | Simulador de balance headless |
 
-### Jugar en red local
+### Jugar online
 
 ```bash
-npm run build        # el servidor sirve este build
-npm run dev:server
+npm run deploy       # Cloudflare Workers: cliente y partidas en el mismo origen
 ```
 
-El servidor escucha en `0.0.0.0:8787` y sirve el cliente compilado, asi que los demas entran
-por `http://<tu-ip-local>:8787`. Uno crea la sala, comparte el codigo de 6 caracteres, y el
-otro lo escribe en el menu. Si se cae la conexion, se recupera el asiento con el token que
-guarda el navegador.
+Uno crea la sala, comparte el codigo de 6 caracteres y el otro lo escribe en el menu. Si se
+cae la conexion se recupera el asiento con el token que guarda el navegador. Los detalles
+del despliegue estan en [`docs/deploy.md`](docs/deploy.md).
+
+Para jugar en la red local sin desplegar nada:
+
+```bash
+npm run build && npm run dev:server    # http://<tu-ip-local>:8787
+```
 
 ## Modos
 
 - **Dos jugadores** en el mismo dispositivo. El tablero gira en cada turno.
 - **Contra la maquina**, en tres niveles.
-- **Online (LAN)** por WebSocket, con servidor autoritativo.
+- **Online** por WebSocket, con servidor autoritativo.
 
 En todos, **el jugador siempre ve sus piezas en la parte de abajo**.
 
@@ -71,7 +77,8 @@ packages/
   engine/   Reglas, minas, revelado, explosiones, protocolo de red. Cero dependencias.
   ai/       Bot: probabilidad de minas, evaluacion y busqueda negamax.
   client/   React + Vite. Tablero, animaciones y menus.
-  server/   Node + ws. Salas de LAN; las minas solo existen aqui.
+  worker/   Cloudflare Workers. Una sala = un Durable Object. Es el de produccion.
+  server/   Node + ws. El mismo juego para la red local, sin herramientas de Cloudflare.
 tools/
   balance/  Simulador bot contra bot que escupe metricas en CSV.
 specs/      Requisitos y criterios de aceptacion (ver "Sobre los specs").
@@ -121,6 +128,18 @@ locales: el bot recibe el mismo `PlayerView` que tendria por la red.
 
 Un detalle bonito que se cae de aqui: como la legalidad no depende de las minas, el cliente
 puede calcular los movimientos legales el solo a partir de la vista, sin preguntar al servidor.
+
+### Una sala es un Durable Object
+
+En produccion cada sala es un Durable Object de Cloudflare, direccionado por su codigo. No es
+un truco de implementacion: es la forma que tiene el problema. Un objeto direccionable por
+nombre, de un solo hilo y con almacenamiento propio da gratis las dos cosas que le faltaban
+al servidor de LAN — la partida sobrevive a un redespliegue y no hay estado que repartir
+entre instancias.
+
+La logica de sala (asientos, turnos, revanchas) vive en el motor y no toca Node ni el
+navegador, asi que el Worker y el servidor de LAN la comparten entera: cada uno pone solo su
+pegamento de transporte.
 
 ### El bot
 
@@ -185,5 +204,4 @@ y cambia `PIECE_SET` en `packages/client/src/theme.ts`. Detalles en
 - El bot no tiene busqueda de quiescencia ni tabla de transposicion, y se le nota en los
   finales: mas de la mitad de las partidas bot contra bot acaban en tablas por la regla de
   50 jugadas.
-- El online es para LAN: sin emparejamiento, sin reloj y sin persistencia entre reinicios
-  del servidor.
+- El online no tiene emparejamiento ni reloj de partida.

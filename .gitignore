@@ -10,3 +10,6 @@ balance-results/
 *.local
 .env
 .env.*
+
+# Estado local de wrangler/miniflare (almacenamiento de los Durable Objects)
+.wrangler/

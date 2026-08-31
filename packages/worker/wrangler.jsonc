@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "chess-sweeper",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+
+  // El propio Worker sirve el cliente compilado: un solo origen, sin CORS, y
+  // `defaultServerUrl()` del cliente sigue apuntando al mismo sitio sin configurar nada.
+  "assets": {
+    "directory": "../client/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+
+  // Una sala = un Durable Object, direccionado por su codigo.
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+  },
+
+  // Respaldo SQLite: es el que esta disponible en el plan gratuito.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+
+  "observability": { "enabled": true }
+}

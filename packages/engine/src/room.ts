@@ -27,6 +27,11 @@ export interface Seat {
    * para tu rival.
    */
   session: string;
+  /**
+   * Momento en que se perdio la conexion, o `null` si esta presente. Es lo que permite
+   * distinguir una caida pasajera de un abandono: ver `forfeitAbsent`.
+   */
+  disconnectedAt: number | null;
 }
 
 export interface RoomState {
@@ -46,6 +51,15 @@ export const isRoomError = <T>(r: T | RoomError): r is RoomError =>
 
 /** Salas sin nadie conectado durante mas de esto se pueden descartar. */
 export const ROOM_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Ausencia a partir de la cual se pierde la partida.
+ *
+ * Aguanta una recarga de pagina, un cambio de pestana y un bache de red, y evita que
+ * cerrar la pestana salga mas barato que rendirse: si irse a proposito costara la partida
+ * y desaparecer no costara nada, nadie usaria nunca el boton honesto.
+ */
+export const ABSENCE_FORFEIT_MS = 2 * 60 * 1000;
 
 // `crypto` es global tanto en Node 19+ como en el runtime de Workers.
 const newToken = (): string => crypto.randomUUID();
@@ -89,7 +103,13 @@ export function takeSeat(
     : wanted;
   if (color === undefined) return { error: 'La sala ya esta completa' };
 
-  const seat: Seat = { color, token: newToken(), connected: true, session: newToken() };
+  const seat: Seat = {
+    color,
+    token: newToken(),
+    connected: true,
+    session: newToken(),
+    disconnectedAt: null,
+  };
   room.seats[color] = seat;
   room.lastActivity = now;
   return seat;
@@ -101,6 +121,7 @@ export function resumeSeat(room: RoomState, token: string, now = Date.now()): Se
     if (seat && seat.token === token) {
       seat.connected = true;
       seat.session = newToken(); // conexion nueva: la anterior deja de mandar
+      seat.disconnectedAt = null; // ha vuelto: el plazo de abandono deja de correr
       room.lastActivity = now;
       return seat;
     }
@@ -158,8 +179,63 @@ export function markDisconnected(
   const seat = room.seats[color];
   if (!seat || seat.session !== session) return false;
   seat.connected = false;
+  seat.disconnectedAt = now;
   room.lastActivity = now;
   return true;
+}
+
+/** Termina la partida dando la victoria al rival de `loser`. */
+function endByAbandon(room: RoomState, loser: Color, now: number): GameEvent[] {
+  const winner = opponentOf(loser);
+  room.game.status = 'abandoned';
+  room.game.winner = winner;
+  room.game.endReason = 'abandoned';
+  room.lastActivity = now;
+  // Mismo evento que cualquier otro final: los transportes y el cliente no necesitan un
+  // camino aparte para este caso.
+  return [{ type: 'end', status: 'abandoned', winner, reason: 'abandoned' }];
+}
+
+/**
+ * Salida voluntaria. Con el rival sentado cuesta la partida; si todavia no ha llegado
+ * nadie no hay nada que ceder y el asiento simplemente queda libre.
+ */
+export function leaveRoom(
+  room: RoomState,
+  color: Color,
+  now = Date.now(),
+): { events: GameEvent[] } | RoomError {
+  if (!room.seats[color]) return { error: 'No estas sentado en esta sala' };
+  if (room.game.status !== 'playing') return { error: 'La partida ya ha terminado' };
+
+  const events = room.seats[opponentOf(color)] ? endByAbandon(room, color, now) : [];
+  // En los dos casos el asiento queda libre: quien se va deja de ocupar sitio. Si no lo
+  // soltara, no podria ni volver a entrar por el codigo de su propia sala.
+  delete room.seats[color];
+  room.lastActivity = now;
+  return { events };
+}
+
+/**
+ * Da por abandonada la partida de quien lleve ausente mas de `ABSENCE_FORFEIT_MS`. La
+ * llaman los dos transportes desde el reloj que ya tenian, de modo que el rival no tiene
+ * que reclamar nada: el resultado llega solo.
+ */
+export function forfeitAbsent(
+  room: RoomState,
+  now = Date.now(),
+): { events: GameEvent[] } | null {
+  if (room.game.status !== 'playing') return null;
+
+  for (const color of ['w', 'b'] as const) {
+    const seat = room.seats[color];
+    if (!seat || seat.connected || seat.disconnectedAt === null) continue;
+    if (now - seat.disconnectedAt <= ABSENCE_FORFEIT_MS) continue;
+    // Sin rival sentado no hay a quien dar la victoria: de esa sala se ocupa `isStale`.
+    if (!room.seats[opponentOf(color)]) continue;
+    return { events: endByAbandon(room, color, now) };
+  }
+  return null;
 }
 
 export const opponentOf = (color: Color): Color => (color === 'w' ? 'b' : 'w');

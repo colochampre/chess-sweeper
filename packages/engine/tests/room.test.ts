@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ABSENCE_FORFEIT_MS,
   ROOM_CODE_LENGTH,
   ROOM_TTL_MS,
   createRoom,
+  forfeitAbsent,
   generateRoomCode,
   intentToQuery,
   isRoomError,
   isStale,
+  leaveRoom,
   legalMoves,
   markDisconnected,
   parseIntent,
@@ -188,5 +191,122 @@ describe('FR-5 parametros de conexion', () => {
   it('AC-502: el codigo se normaliza antes de validarse', () => {
     const parsed = parseIntent(new URLSearchParams('a=join&code= abc-234 '));
     expect(parsed).toEqual({ a: 'join', code: 'ABC234' });
+  });
+});
+
+describe('FR-11 abandonar una partida', () => {
+  /** Sala con los dos asientos ocupados y la partida en marcha. */
+  const started = () => {
+    const r = room();
+    const host = seatOf(takeSeat(r));
+    const guest = seatOf(takeSeat(r));
+    return { r, host, guest };
+  };
+
+  it('AC-1102: al abandonar, la partida termina y gana el rival', () => {
+    const { r, host, guest } = started();
+
+    const result = leaveRoom(r, host.color);
+    if (isRoomError(result)) throw new Error(`abandono inesperado: ${result.error}`);
+
+    expect(r.game.status).toBe('abandoned');
+    expect(r.game.winner).toBe(guest.color);
+    expect(r.game.endReason).toBe('abandoned');
+  });
+
+  it('AC-1107: el final por abandono viaja en el mismo evento `end` que el resto', () => {
+    const { r, host, guest } = started();
+
+    const result = leaveRoom(r, host.color);
+    if (isRoomError(result)) throw new Error(`abandono inesperado: ${result.error}`);
+
+    expect(result.events).toEqual([
+      { type: 'end', status: 'abandoned', winner: guest.color, reason: 'abandoned' },
+    ]);
+  });
+
+  it('AC-1103: perder la conexion no termina la partida y el asiento se recupera', () => {
+    const { r, host } = started();
+
+    expect(markDisconnected(r, host.color, host.session)).toBe(true);
+    expect(r.game.status).toBe('playing');
+
+    const back = seatOf(resumeSeat(r, host.token));
+    expect(back.color).toBe(host.color);
+    expect(back.connected).toBe(true);
+    expect(r.game.status).toBe('playing');
+  });
+
+  it('AC-1104: una ausencia larga da la victoria al rival sin que este pida nada', () => {
+    const { r, host, guest } = started();
+    const t0 = Date.now();
+    markDisconnected(r, host.color, host.session, t0);
+
+    // Todavia dentro del plazo: la partida sigue.
+    expect(forfeitAbsent(r, t0 + ABSENCE_FORFEIT_MS - 1)).toBeNull();
+    expect(r.game.status).toBe('playing');
+
+    const result = forfeitAbsent(r, t0 + ABSENCE_FORFEIT_MS + 1);
+    expect(result).not.toBeNull();
+    expect(r.game.status).toBe('abandoned');
+    expect(r.game.winner).toBe(guest.color);
+  });
+
+  it('AC-1104: volver antes del plazo cancela el abandono', () => {
+    const { r, host } = started();
+    const t0 = Date.now();
+    markDisconnected(r, host.color, host.session, t0);
+    resumeSeat(r, host.token, t0 + 1000);
+
+    expect(forfeitAbsent(r, t0 + ABSENCE_FORFEIT_MS + 1)).toBeNull();
+    expect(r.game.status).toBe('playing');
+  });
+
+  it('AC-1105: irse antes de que llegue el rival no da la victoria a nadie', () => {
+    const r = room();
+    const host = seatOf(takeSeat(r));
+
+    const result = leaveRoom(r, host.color);
+    if (isRoomError(result)) throw new Error(`abandono inesperado: ${result.error}`);
+
+    expect(result.events).toEqual([]);
+    expect(r.game.status).toBe('playing');
+    expect(r.game.winner).toBeNull();
+    // El asiento queda libre: la sala vuelve a admitir a alguien.
+    expect(r.seats[host.color]).toBeUndefined();
+    expect(isRoomError(takeSeat(r))).toBe(false);
+  });
+
+  it('AC-1108: al abandonar, el asiento queda libre y se puede volver a ocupar', () => {
+    const { r, host, guest } = started();
+
+    leaveRoom(r, host.color);
+
+    // El que se fue ya no ocupa sitio...
+    expect(r.seats[host.color]).toBeUndefined();
+    // ...pero el que se queda conserva el suyo, y su victoria.
+    expect(r.seats[guest.color]).toBeDefined();
+    expect(r.game.winner).toBe(guest.color);
+    // Y la sala vuelve a admitir a alguien en el asiento vacante.
+    const back = takeSeat(r);
+    expect(isRoomError(back)).toBe(false);
+    expect(seatOf(back).color).toBe(host.color);
+  });
+
+  it('AC-1106: una partida ya terminada no se abandona dos veces', () => {
+    const { r, host, guest } = started();
+    leaveRoom(r, host.color);
+
+    expect(isRoomError(leaveRoom(r, guest.color))).toBe(true);
+    expect(r.game.winner).toBe(guest.color);
+  });
+
+  it('AC-1106: una ausencia larga sobre una partida terminada no cambia el resultado', () => {
+    const { r, host, guest } = started();
+    leaveRoom(r, host.color);
+
+    markDisconnected(r, guest.color, guest.session, Date.now());
+    expect(forfeitAbsent(r, Date.now() + ABSENCE_FORFEIT_MS + 1)).toBeNull();
+    expect(r.game.winner).toBe(guest.color);
   });
 });

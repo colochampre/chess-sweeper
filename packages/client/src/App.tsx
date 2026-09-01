@@ -5,6 +5,7 @@ import { Menu } from './components/Menu.js';
 import { Lobby } from './components/Lobby.js';
 import { BalancePanel } from './components/BalancePanel.js';
 import { GameOver } from './components/GameOver.js';
+import { ConfirmLeave } from './components/ConfirmLeave.js';
 import { useGame } from './store.js';
 
 export function App() {
@@ -29,6 +30,7 @@ export function App() {
       <div className="board-area">
         <Board />
         <GameOver />
+        <ConfirmLeave />
       </div>
       <div className="side">
         <Hud />

@@ -16,13 +16,14 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import {
   CLOSE_REFUSED,
   CLOSE_REPLACED,
-  ROOM_TTL_MS,
   WS_PATH,
   createRoom,
+  forfeitAbsent,
   generateRoomCode,
   isOriginAllowed,
   isRoomError,
   isStale,
+  leaveRoom,
   markDisconnected,
   opponentOf,
   parseIntent,
@@ -33,6 +34,7 @@ import {
   viewFor,
   type ClientMessage,
   type Color,
+  type GameEvent,
   type RoomState,
   type Seat,
   type ServerMessage,
@@ -42,6 +44,8 @@ const DEFAULT_DIST = fileURLToPath(new URL('../../client/dist', import.meta.url)
 
 /** Un movimiento son unas decenas de bytes; por encima de esto es basura o un ataque. */
 const MAX_MESSAGE_BYTES = 4 * 1024;
+/** Cada cuanto se revisan abandonos por ausencia y salas caducadas. */
+const SWEEP_MS = 30_000;
 /** Cada cuanto se comprueba que las conexiones siguen vivas. */
 const HEARTBEAT_MS = 30_000;
 
@@ -113,6 +117,19 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       const socket = members.get(room.code)?.get(color);
       if (!socket) continue;
       send(socket, { t: 'opponent', connected: room.seats[opponentOf(color)]?.connected === true });
+    }
+  }
+
+  /** Los eventos llegan a los dos asientos con la vista de cada uno, sea un movimiento
+   * o un final por abandono: el cliente no necesita distinguirlos. */
+  function broadcastEvents(room: RoomState, events: GameEvent[]): void {
+    if (events.length === 0) return;
+    for (const seatColor of ['w', 'b'] as const) {
+      // Un asiento liberado (quien acaba de abandonar) ya no recibe: el Worker resuelve sus
+      // sockets por asiento, asi que sin esto los dos transportes no se comportarian igual.
+      if (!room.seats[seatColor]) continue;
+      const target = members.get(room.code)?.get(seatColor);
+      if (target) send(target, { t: 'moved', events, view: viewFor(room, seatColor) });
     }
   }
 
@@ -199,12 +216,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
             send(socket, { t: 'error', message: result.error });
             return send(socket, { t: 'sync', view: viewFor(room, color) });
           }
-          for (const seatColor of ['w', 'b'] as const) {
-            const target = members.get(room.code)?.get(seatColor);
-            if (target) {
-              send(target, { t: 'moved', events: result.events, view: viewFor(room, seatColor) });
-            }
-          }
+          broadcastEvents(room, result.events);
           return;
         }
         case 'rematch': {
@@ -233,8 +245,12 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
           }
           return;
         }
-        case 'leave':
+        case 'leave': {
+          // Irse a proposito cuesta la partida; el cierre del socket por si solo no.
+          const result = leaveRoom(room, color);
+          if (!isRoomError(result)) broadcastEvents(room, result.events);
           return socket.close(1000, 'Salida voluntaria');
+        }
         default:
           return send(socket, { t: 'error', message: 'Mensaje desconocido' });
       }
@@ -269,12 +285,15 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
 
   const sweep = setInterval(() => {
     for (const [code, room] of rooms) {
+      // Ausentarse demasiado equivale a irse: el rival no tiene que reclamar nada.
+      const abandoned = forfeitAbsent(room);
+      if (abandoned) broadcastEvents(room, abandoned.events);
       if (isStale(room)) {
         rooms.delete(code);
         members.delete(code);
       }
     }
-  }, ROOM_TTL_MS);
+  }, SWEEP_MS);
   sweep.unref();
 
   await new Promise<void>((resolve) => {

@@ -57,8 +57,13 @@ const socketUrl = (intent: ConnectIntent): string =>
 export interface OnlineHandlers {
   onMessage(message: ServerMessage): void;
   onOpen(): void;
-  /** `willRetry` en false significa que ya no se va a intentar mas. */
-  onClose(willRetry: boolean): void;
+  /**
+   * @param willRetry en false significa que ya no se va a intentar mas.
+   * @param deliberate el cierre lo pidio la propia aplicacion (salir al menu). Cerrar a
+   * proposito no es un fallo, y anunciarlo como tal contradice lo que el jugador acaba de
+   * hacer: confirma que abandona y acto seguido se le dice que fallo la conexion.
+   */
+  onClose(willRetry: boolean, deliberate: boolean): void;
 }
 
 /** Conexion al servidor con reintentos: una caida suele ser momentanea. */
@@ -105,7 +110,7 @@ export class OnlineClient {
       }
     };
     socket.onclose = (event) => {
-      if (this.closedByUs) return this.handlers.onClose(false);
+      if (this.closedByUs) return this.handlers.onClose(false, true);
 
       const seat = loadSeat();
       // Solo se reintenta una conexion que LLEGO A SENTARSE. Si nunca se sento, el problema
@@ -114,7 +119,7 @@ export class OnlineClient {
       // `resume` a una partida anterior que no tiene nada que ver con la que se pidio.
       const retry =
         this.seated && seat !== null && event.code !== CLOSE_REFUSED && this.attempts < 6;
-      this.handlers.onClose(retry);
+      this.handlers.onClose(retry, false);
       if (!retry) return;
 
       this.intent = { a: 'resume', code: seat.code, token: seat.token };

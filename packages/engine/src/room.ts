@@ -32,6 +32,8 @@ export interface Seat {
    * distinguir una caida pasajera de un abandono: ver `forfeitAbsent`.
    */
   disconnectedAt: number | null;
+  /** Ha pedido la revancha. Se olvida al empezarla y al ausentarse. */
+  wantsRematch: boolean;
 }
 
 export interface RoomState {
@@ -109,6 +111,7 @@ export function takeSeat(
     connected: true,
     session: newToken(),
     disconnectedAt: null,
+    wantsRematch: false,
   };
   room.seats[color] = seat;
   room.lastActivity = now;
@@ -158,9 +161,35 @@ export function rematch(room: RoomState, now = Date.now()): void {
   room.seats = {};
   for (const seat of seats) {
     seat.color = seat.color === 'w' ? 'b' : 'w';
+    seat.wantsRematch = false; // la siguiente revancha hay que volver a acordarla
     room.seats[seat.color] = seat;
   }
   room.lastActivity = now;
+}
+
+/**
+ * Pide la revancha. Solo empieza cuando la han pedido los dos: reiniciar la partida es un
+ * acuerdo de la mesa, no una accion de uno de los dos jugadores. Antes bastaba con que
+ * llegara un mensaje, asi que se le podia reiniciar la partida al rival sin avisarle.
+ */
+export function requestRematch(
+  room: RoomState,
+  color: Color,
+  now = Date.now(),
+): { agreed: boolean } | RoomError {
+  const seat = room.seats[color];
+  if (!seat) return { error: 'No estas sentado en esta sala' };
+  if (room.game.status === 'playing') return { error: 'La partida todavia no ha terminado' };
+
+  const rival = room.seats[opponentOf(color)];
+  if (!rival) return { error: 'Tu rival ya no esta en la sala' };
+
+  seat.wantsRematch = true;
+  room.lastActivity = now;
+  if (!rival.wantsRematch) return { agreed: false };
+
+  rematch(room, now);
+  return { agreed: true };
 }
 
 /** Proyeccion que se envia a un jugador. Nunca incluye el campo de minas. */
@@ -180,6 +209,8 @@ export function markDisconnected(
   if (!seat || seat.session !== session) return false;
   seat.connected = false;
   seat.disconnectedAt = now;
+  // Una revancha no puede arrancar con alguien que ya no esta delante.
+  seat.wantsRematch = false;
   room.lastActivity = now;
   return true;
 }

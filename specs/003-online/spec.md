@@ -163,3 +163,23 @@ deja al rival esperando indefinidamente.
 - **AC-1109** Mientras el rival esta ausente, el cliente muestra cuanto le queda antes de
   perder por abandono. Un plazo que corre en silencio obliga a elegir entre esperar sin
   saber cuanto o irse.
+
+## FR-12 - La revancha se acuerda
+
+Reiniciar la partida era unilateral: el primer mensaje que llegaba la reiniciaba, sin
+preguntarle al otro. Y como el boton estaba tambien en el HUD, se podia reiniciar la partida
+del rival en mitad del juego.
+
+Una revancha es un acuerdo entre dos, no una accion de uno.
+
+- **AC-1201** La revancha necesita que la pidan los dos. Con una sola peticion la partida no
+  se reinicia.
+- **AC-1202** Pedirla se le comunica al rival, y quien la pidio ve que esta esperando. Un
+  boton que no responde no se distingue de uno roto.
+- **AC-1203** No se puede pedir con la partida en curso: la revancha es lo que se ofrece al
+  final, no un boton de reinicio.
+- **AC-1204** No se puede pedir si el rival ya no esta sentado: no hay con quien acordar.
+- **AC-1205** Al empezar la revancha las peticiones se olvidan. La siguiente hay que volver a
+  pedirla.
+- **AC-1206** Ausentarse retira la peticion, para que una revancha no arranque con alguien
+  que ya no esta delante.

@@ -126,11 +126,13 @@ export function Hud() {
       </div>
 
       <div className="panel actions">
-        <button onClick={() => s.restart()}>
-          {s.mode === 'online' ? 'Pedir revancha' : 'Partida nueva'}
-        </button>
+        {/* En online no va: la revancha se ofrece al final de la partida, y desde aqui se le
+            reiniciaba la partida al rival en mitad del juego. */}
         {s.mode !== 'online' && (
-          <button onClick={() => s.restart(undefined, s.seed)}>Reiniciar misma semilla</button>
+          <>
+            <button onClick={() => s.restart()}>Partida nueva</button>
+            <button onClick={() => s.restart(undefined, s.seed)}>Reiniciar misma semilla</button>
+          </>
         )}
         <button onClick={s.flipBoard}>Girar tablero</button>
         <label className="check-row">

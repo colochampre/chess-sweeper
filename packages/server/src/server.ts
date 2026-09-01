@@ -29,7 +29,7 @@ import {
   opponentOf,
   parseIntent,
   playMove,
-  rematch,
+  requestRematch,
   resumeSeat,
   takeSeat,
   viewFor,
@@ -142,6 +142,19 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     }
   }
 
+  /** Quien ha pedido la revancha, para que el boton diga si esta esperando o le esperan. */
+  function broadcastRematchState(room: RoomState): void {
+    for (const color of ['w', 'b'] as const) {
+      const target = members.get(room.code)?.get(color);
+      if (!target) continue;
+      send(target, {
+        t: 'rematch',
+        mine: room.seats[color]?.wantsRematch === true,
+        theirs: room.seats[opponentOf(color)]?.wantsRematch === true,
+      });
+    }
+  }
+
   function seat(socket: WebSocket, room: RoomState, taken: Seat): void {
     const { color, token, session } = taken;
     const roomMembers = members.get(room.code) ?? new Map<Color, WebSocket>();
@@ -229,7 +242,10 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
           return;
         }
         case 'rematch': {
-          rematch(room);
+          const asked = requestRematch(room, color);
+          if (isRoomError(asked)) return send(socket, { t: 'error', message: asked.error });
+          // Con una sola peticion no se reinicia nada: se avisa a los dos y se espera.
+          if (!asked.agreed) return broadcastRematchState(room);
           // Los colores se intercambian: cada socket se resienta en el suyo.
           const roomMembers = members.get(room.code);
           if (!roomMembers) return;

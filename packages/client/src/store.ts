@@ -59,6 +59,10 @@ export interface OnlineInfo {
    * el store tenga que latir cada segundo.
    */
   opponentDeadline: number | null;
+  /** Has pedido la revancha y falta que la pida el rival. */
+  rematchMine: boolean;
+  /** El rival la pidio y falta que la pidas vos. */
+  rematchTheirs: boolean;
 }
 
 interface AppState {
@@ -242,7 +246,15 @@ export const useGame = create<AppState>((set, get) => {
           targets: [],
           lastMove: null,
           error: null,
-          online: { ...s.online, code: message.code, connected: true, waiting: true },
+          // Empieza partida: las peticiones de revancha quedan saldadas.
+          online: {
+            ...s.online,
+            code: message.code,
+            connected: true,
+            waiting: true,
+            rematchMine: false,
+            rematchTheirs: false,
+          },
         });
         break;
       case 'sync':
@@ -261,6 +273,9 @@ export const useGame = create<AppState>((set, get) => {
         void play(message.events, message.view);
         break;
       }
+      case 'rematch':
+        set({ online: { ...get().online, rematchMine: message.mine, rematchTheirs: message.theirs } });
+        break;
       case 'opponent':
         set({
           online: {
@@ -324,7 +339,15 @@ export const useGame = create<AppState>((set, get) => {
     engine: null,
     view: null,
     flags: [],
-    online: { code: null, connected: false, opponentConnected: false, waiting: false, opponentDeadline: null },
+    online: {
+        code: null,
+        connected: false,
+        opponentConnected: false,
+        waiting: false,
+        opponentDeadline: null,
+        rematchMine: false,
+        rematchTheirs: false,
+      },
     confirmingLeave: false,
 
     pieces: [],
@@ -366,7 +389,15 @@ export const useGame = create<AppState>((set, get) => {
         engine,
         view,
         flags: new Array<boolean>(engine.board.length).fill(false),
-        online: { code: null, connected: false, opponentConnected: false, waiting: false, opponentDeadline: null },
+        online: {
+        code: null,
+        connected: false,
+        opponentConnected: false,
+        waiting: false,
+        opponentDeadline: null,
+        rematchMine: false,
+        rematchTheirs: false,
+      },
         ...renderLayer(view),
         animating: false,
         selected: null,
@@ -457,7 +488,15 @@ export const useGame = create<AppState>((set, get) => {
         view: null,
         selected: null,
         targets: [],
-        online: { code: null, connected: false, opponentConnected: false, waiting: false, opponentDeadline: null },
+        online: {
+        code: null,
+        connected: false,
+        opponentConnected: false,
+        waiting: false,
+        opponentDeadline: null,
+        rematchMine: false,
+        rematchTheirs: false,
+      },
         confirmingLeave: false,
       });
     },

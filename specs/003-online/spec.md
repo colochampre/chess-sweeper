@@ -68,3 +68,58 @@ Una sala es un Durable Object, direccionado por su codigo (`idFromName(code)`).
 
 AC-601 a AC-605 se verifican contra `wrangler dev`, que ejecuta Durable Objects de verdad en
 local; no hay test unitario porque dependen del runtime, no de la logica.
+
+- **AC-606** El socket vigente de un asiento se localiza por su **sesion**, no por su color.
+  `close()` es asincrono: un socket recien reemplazado sigue apareciendo en la lista con el
+  mismo color, y mandarle a el la presencia dejaria al rival viendo "Esperando al rival".
+- **AC-607** El limite de ritmo se cuenta **por conexion**. Contandolo por sala, pasarse uno
+  desconectaria al rival, que es justo al que no hay que castigar.
+
+## FR-7 · Origenes permitidos
+
+Una sola decision, aplicada igual en los dos transportes (`@cm/engine/origin`).
+
+- **AC-701** Sin cabecera `Origin` se acepta: no hay navegador al que suplantar.
+- **AC-702** El mismo origen siempre vale.
+- **AC-703** Con los dos extremos en local (loopback o rango privado) vale otro puerto. Es
+  lo que hace posible el circuito de desarrollo: Vite en el 5173 contra el servidor en el 8787.
+- **AC-704** Un origen publico no entra aunque el servidor sea local, ni disfrazandose de
+  subdominio (`localhost.evil.com`). Un `Origin` que no es una URL se rechaza.
+- **AC-705** Si se define `ALLOWED_ORIGINS`, manda esa lista y nada mas: ni el atajo local.
+
+## FR-8 · El transporte tambien se prueba
+
+Tests de integracion que levantan el servidor y hablan con el por WebSocket de verdad.
+
+Existen porque el pegamento de transporte no tenia ni una linea cubierta, y por ahi se colo
+que `handleUpgrade` con `noServer: true` no emite `'connection'`: el servidor sentaba al
+jugador y despues descartaba todos sus mensajes en silencio. Compilaba y los tests pasaban.
+
+- **AC-801** Un movimiento legal produce `moved`; uno ilegal, `error` y `sync`; un mensaje
+  ilegible no tumba la conexion.
+- **AC-802** Con dos jugadores, cada uno ve al otro presente y el movimiento le llega al rival.
+- **AC-803** Al irse un jugador, el rival recibe el aviso.
+
+## FR-9 · Los rechazos se explican
+
+Un `socket.destroy()` a secas no deja al cliente ni un motivo: se queda en "Conectando...".
+
+- **AC-901** Un codigo de sala inexistente abre el socket, manda `error` con el motivo y
+  cierra con un codigo propio para que el cliente no reintente.
+- **AC-902** Un origen ajeno se rechaza con 403 antes del apreton de manos.
+- **AC-903** El circuito de desarrollo (Vite en otro puerto) si se acepta.
+- **AC-904** Los parametros invalidos se rechazan con 400, tambien antes del apreton de manos.
+
+## FR-10 · Politica de reconexion del cliente
+
+- **AC-1001** Solo se reintenta una conexion que **llego a sentarse**. Si nunca se sento, el
+  problema no es la red: reintentar un `create` fabricaria una sala huerfana por intento, y
+  un `join` fallido acabaria entrando por `resume` a una partida anterior que no tiene nada
+  que ver con la que se pidio.
+- **AC-1002** Cuando ya no se va a reintentar y el servidor no explico nada, el cliente lo
+  dice en vez de dejar un "Conectando..." eterno.
+- **AC-1003** El codigo de sala se valida y se normaliza al escribirlo, no al enviarlo: lo
+  que se ve en la caja es lo que se manda.
+
+AC-1001 a AC-1003 se comprueban a mano con las dos pestanas; viven en la capa de WebSocket
+del navegador, no en logica que se pueda aislar.

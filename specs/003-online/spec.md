@@ -143,3 +143,5 @@ deja al rival esperando indefinidamente.
 - **AC-1106** Una partida ya terminada no se puede abandonar otra vez.
 - **AC-1107** El final por abandono viaja en el mismo evento `end` que cualquier otro final,
   de modo que los dos transportes y el cliente no necesitan un camino aparte.
+- **AC-1108** Al abandonar, el asiento queda libre. Quien se fue no sigue ocupando sitio en
+  una partida que ya cedio, ni le impide volver a entrar por el codigo.

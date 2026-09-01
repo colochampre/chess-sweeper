@@ -260,13 +260,13 @@ export const useGame = create<AppState>((set, get) => {
       socket = new OnlineClient({
         onMessage: onServerMessage,
         onOpen: () => set({ online: { ...get().online, connected: true } }),
-        onClose: (willRetry) => {
+        onClose: (willRetry, deliberate) => {
           const s = get();
           set({ online: { ...s.online, connected: false } });
           // Si el servidor explico el motivo ya hay un error puesto; si no lo hizo (origen
           // rechazado, parametros invalidos, servidor caido) el cliente se quedaria mirando
           // un "Conectando..." eterno.
-          if (!willRetry && s.error === null) {
+          if (!willRetry && !deliberate && s.error === null) {
             set({ error: 'No se pudo conectar con el servidor.' });
           }
         },

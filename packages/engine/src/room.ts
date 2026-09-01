@@ -208,12 +208,12 @@ export function leaveRoom(
   if (!room.seats[color]) return { error: 'No estas sentado en esta sala' };
   if (room.game.status !== 'playing') return { error: 'La partida ya ha terminado' };
 
-  if (!room.seats[opponentOf(color)]) {
-    delete room.seats[color];
-    room.lastActivity = now;
-    return { events: [] };
-  }
-  return { events: endByAbandon(room, color, now) };
+  const events = room.seats[opponentOf(color)] ? endByAbandon(room, color, now) : [];
+  // En los dos casos el asiento queda libre: quien se va deja de ocupar sitio. Si no lo
+  // soltara, no podria ni volver a entrar por el codigo de su propia sala.
+  delete room.seats[color];
+  room.lastActivity = now;
+  return { events };
 }
 
 /**

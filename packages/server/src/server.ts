@@ -125,6 +125,9 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   function broadcastEvents(room: RoomState, events: GameEvent[]): void {
     if (events.length === 0) return;
     for (const seatColor of ['w', 'b'] as const) {
+      // Un asiento liberado (quien acaba de abandonar) ya no recibe: el Worker resuelve sus
+      // sockets por asiento, asi que sin esto los dos transportes no se comportarian igual.
+      if (!room.seats[seatColor]) continue;
       const target = members.get(room.code)?.get(seatColor);
       if (target) send(target, { t: 'moved', events, view: viewFor(room, seatColor) });
     }

@@ -243,6 +243,28 @@ describe('FR-11 abandonar una partida', () => {
     host.bye();
   });
 
+  it('AC-1108: quien abandona libera su asiento y puede volver a entrar por el codigo', async () => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('opponent', (m) => m.t === 'opponent' && m.connected);
+
+    host.send({ t: 'leave' });
+    await guest.waitFor('moved');
+    host.bye();
+
+    // El asiento quedo libre: entrar con el codigo ya no responde "la sala esta completa".
+    const again = connect(`a=join&code=${seated.code}`);
+    const backSeated = await again.waitFor('seated');
+    expect(backSeated.t).toBe('seated');
+
+    guest.bye();
+    again.bye();
+  });
+
   it('AC-1105: irse antes de que llegue el rival deja el asiento libre', async () => {
     const host = connect(CREATE);
     const seated = await host.waitFor('seated');

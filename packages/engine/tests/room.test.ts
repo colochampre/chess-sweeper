@@ -277,6 +277,22 @@ describe('FR-11 abandonar una partida', () => {
     expect(isRoomError(takeSeat(r))).toBe(false);
   });
 
+  it('AC-1108: al abandonar, el asiento queda libre y se puede volver a ocupar', () => {
+    const { r, host, guest } = started();
+
+    leaveRoom(r, host.color);
+
+    // El que se fue ya no ocupa sitio...
+    expect(r.seats[host.color]).toBeUndefined();
+    // ...pero el que se queda conserva el suyo, y su victoria.
+    expect(r.seats[guest.color]).toBeDefined();
+    expect(r.game.winner).toBe(guest.color);
+    // Y la sala vuelve a admitir a alguien en el asiento vacante.
+    const back = takeSeat(r);
+    expect(isRoomError(back)).toBe(false);
+    expect(seatOf(back).color).toBe(host.color);
+  });
+
   it('AC-1106: una partida ya terminada no se abandona dos veces', () => {
     const { r, host, guest } = started();
     leaveRoom(r, host.color);

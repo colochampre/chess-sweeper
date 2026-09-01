@@ -8,6 +8,8 @@ export function GameOver() {
 
   const youWon = s.mode !== 'hotseat' && view.winner === s.humanColor;
   const youLost = s.mode !== 'hotseat' && view.winner !== null && view.winner !== s.humanColor;
+  // En online el rival es una persona. Llamarlo "la maquina" solo tiene sentido contra el bot.
+  const defeatText = s.mode === 'bot' ? 'Gana la maquina.' : 'Gana tu rival.';
 
   return (
     <div className="game-over">
@@ -19,7 +21,7 @@ export function GameOver() {
             : youWon
               ? 'Ganas tu.'
               : youLost
-                ? 'Gana la maquina.'
+                ? defeatText
                 : `Ganan las ${COLOR_NAME[view.winner].toLowerCase()}.`}
         </p>
         <div className="row">

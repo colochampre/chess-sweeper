@@ -42,6 +42,13 @@ export type ServerMessage =
   | { t: 'opponent'; connected: boolean }
   | { t: 'error'; message: string };
 
+/**
+ * Codigos de cierre propios. `REFUSED` le dice al cliente que el servidor ya explico el
+ * motivo y que reintentar no va a cambiar nada.
+ */
+export const CLOSE_REPLACED = 4001;
+export const CLOSE_REFUSED = 4002;
+
 export const ROOM_CODE_LENGTH = 6;
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin caracteres ambiguos
 

@@ -33,7 +33,6 @@ import {
   viewFor,
   type ClientMessage,
   type Color,
-  type ConnectIntent,
   type RoomState,
   type ServerMessage,
 } from '@cm/engine';
@@ -47,8 +46,11 @@ export interface Env {
 
 /** Un movimiento son unas decenas de bytes; por encima de esto es basura o un ataque. */
 const MAX_MESSAGE_BYTES = 4 * 1024;
-/** Mensajes por ventana y sala. El ajedrez es por turnos: esto sobra de largo. */
+/** Mensajes por ventana y CONEXION. El ajedrez es por turnos: esto sobra de largo. */
 const RATE_LIMIT = { messages: 40, windowMs: 10_000 };
+
+/** Longitud real en bytes: `String.length` cuenta unidades UTF-16, no bytes. */
+const utf8Bytes = (text: string): number => new TextEncoder().encode(text).byteLength;
 
 const encode = (message: ServerMessage): string => JSON.stringify(message);
 
@@ -75,11 +77,16 @@ function originAllowed(request: Request, env: Env): boolean {
   }
 }
 
-function roomStub(env: Env, code: string, request: Request, code2 = code): Promise<Response> {
+/**
+ * Reenvia la peticion al Durable Object de esa sala. El codigo es a la vez la direccion del
+ * objeto y el parametro que este lee, asi que no pueden diferir. Se construye una peticion
+ * nueva en cada llamada, porque el bucle de colisiones puede reintentar.
+ */
+function roomStub(env: Env, code: string, request: Request): Promise<Response> {
   const url = new URL(request.url);
-  url.searchParams.set('code', code2);
+  url.searchParams.set('code', code);
   const stub = env.ROOMS.get(env.ROOMS.idFromName(code));
-  return stub.fetch(new Request(url.toString(), request));
+  return stub.fetch(new Request(url.toString(), { method: request.method, headers: request.headers }));
 }
 
 export default {
@@ -118,8 +125,8 @@ export default {
 
 export class Room implements DurableObject {
   private room: RoomState | null = null;
-  /** Marcas de tiempo de los ultimos mensajes, para limitar el ritmo. */
-  private recent: number[] = [];
+  /** Marcas de tiempo de los ultimos mensajes, por conexion. */
+  private recent = new Map<string, number[]>();
 
   constructor(
     private readonly ctx: DurableObjectState,
@@ -142,12 +149,15 @@ export class Room implements DurableObject {
     return (ws.deserializeAttachment() as Attachment | null) ?? null;
   }
 
-  private colorOf(ws: WebSocket): Color | null {
-    return this.attachmentOf(ws)?.color ?? null;
-  }
-
+  /**
+   * El socket vigente de ese color. Se busca por sesion, no por color: `close()` es
+   * asincrono, asi que un socket recien reemplazado sigue apareciendo en `getWebSockets()`
+   * con el mismo color, y mandarle a el la presencia dejaria al rival viendo "Esperando".
+   */
   private socketFor(color: Color): WebSocket | undefined {
-    return this.ctx.getWebSockets().find((ws) => this.colorOf(ws) === color);
+    const session = this.room?.seats[color]?.session;
+    if (session === undefined) return undefined;
+    return this.ctx.getWebSockets().find((ws) => this.attachmentOf(ws)?.session === session);
   }
 
   private send(color: Color, message: ServerMessage): void {
@@ -232,23 +242,28 @@ export class Room implements DurableObject {
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  private rateLimited(): boolean {
+  /** Por conexion: si el contador fuera de la sala, pasarse uno desconectaria al otro. */
+  private rateLimited(session: string): boolean {
     const now = Date.now();
-    this.recent = this.recent.filter((t) => now - t < RATE_LIMIT.windowMs);
-    this.recent.push(now);
-    return this.recent.length > RATE_LIMIT.messages;
+    const marks = (this.recent.get(session) ?? []).filter((t) => now - t < RATE_LIMIT.windowMs);
+    marks.push(now);
+    this.recent.set(session, marks);
+    return marks.length > RATE_LIMIT.messages;
   }
 
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
-    if (typeof raw !== 'string' || raw.length > MAX_MESSAGE_BYTES) {
+    // `raw.length` primero como descarte barato: en UTF-8 los bytes nunca son menos que
+    // las unidades de codigo, asi que si ya se pasa por ahi, se pasa seguro.
+    if (typeof raw !== 'string' || raw.length > MAX_MESSAGE_BYTES || utf8Bytes(raw) > MAX_MESSAGE_BYTES) {
       return ws.close(1009, 'Mensaje demasiado grande');
     }
-    if (this.rateLimited()) return ws.close(1008, 'Demasiados mensajes');
 
-    const color = this.colorOf(ws);
-    if (color === null || this.room === null) {
+    const attachment = this.attachmentOf(ws);
+    if (attachment === null || this.room === null) {
       return ws.send(encode({ t: 'error', message: 'No estas sentado en ninguna sala' }));
     }
+    if (this.rateLimited(attachment.session)) return ws.close(1008, 'Demasiados mensajes');
+    const color = attachment.color;
 
     let message: ClientMessage;
     try {
@@ -278,16 +293,15 @@ export class Room implements DurableObject {
 
       case 'rematch': {
         rematch(this.room);
-        // Los colores se intercambian, asi que cada socket se resienta en el suyo.
+        // Los colores se intercambian, asi que cada socket se resienta en el suyo. El
+        // asiento conserva su sesion, de modo que un socket ya reemplazado no coincide con
+        // ninguno y se salta: si se le dejara escribir, reintroduciria el bug de AC-305.
         for (const socket of this.ctx.getWebSockets()) {
-          const previous = this.colorOf(socket);
-          if (previous === null) continue;
-          const next = opponentOf(previous);
-          const session = this.attachmentOf(socket)?.session ?? '';
-          this.room.seats[next] = this.room.seats[next]
-            ? { ...this.room.seats[next]!, session }
-            : this.room.seats[next];
-          socket.serializeAttachment({ color: next, session } satisfies Attachment);
+          const current = this.attachmentOf(socket);
+          if (current === null) continue;
+          const next = opponentOf(current.color);
+          if (this.room.seats[next]?.session !== current.session) continue;
+          socket.serializeAttachment({ color: next, session: current.session } satisfies Attachment);
           socket.send(
             encode({
               t: 'seated',
@@ -314,6 +328,7 @@ export class Room implements DurableObject {
     const attachment = this.attachmentOf(ws);
     if (attachment === null || this.room === null) return;
     // Si esta conexion ya habia sido reemplazada por otra, su cierre no significa nada.
+    this.recent.delete(attachment.session);
     if (!markDisconnected(this.room, attachment.color, attachment.session)) return;
     this.broadcastPresence();
     await this.save();
@@ -333,6 +348,3 @@ export class Room implements DurableObject {
     await this.ctx.storage.deleteAll();
   }
 }
-
-// Referencia usada solo para el tipo del intent en `roomStub`.
-export type { ConnectIntent };

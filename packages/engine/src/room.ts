@@ -225,17 +225,33 @@ export function forfeitAbsent(
   room: RoomState,
   now = Date.now(),
 ): { events: GameEvent[] } | null {
-  if (room.game.status !== 'playing') return null;
-
   for (const color of ['w', 'b'] as const) {
-    const seat = room.seats[color];
-    if (!seat || seat.connected || seat.disconnectedAt === null) continue;
-    if (now - seat.disconnectedAt <= ABSENCE_FORFEIT_MS) continue;
-    // Sin rival sentado no hay a quien dar la victoria: de esa sala se ocupa `isStale`.
-    if (!room.seats[opponentOf(color)]) continue;
-    return { events: endByAbandon(room, color, now) };
+    if (absenceMsLeft(room, color, now) === 0) {
+      return { events: endByAbandon(room, color, now) };
+    }
   }
   return null;
+}
+
+/**
+ * Cuanto le queda a `color` antes de perder por ausencia, o `null` si no corre ningun plazo
+ * (esta presente, la partida termino, o no hay rival a quien dar la victoria).
+ *
+ * El cobro de `forfeitAbsent` sale de aqui a proposito: si el plazo que se le ensena al
+ * jugador y el que aplica el servidor se calcularan por separado, podrian discrepar y la
+ * cuenta llegaria a cero sin que pasara nada.
+ */
+export function absenceMsLeft(
+  room: RoomState,
+  color: Color,
+  now = Date.now(),
+): number | null {
+  if (room.game.status !== 'playing') return null;
+  const seat = room.seats[color];
+  if (!seat || seat.connected || seat.disconnectedAt === null) return null;
+  // Sin rival sentado no hay a quien dar la victoria: de esa sala se ocupa `isStale`.
+  if (!room.seats[opponentOf(color)]) return null;
+  return Math.max(0, seat.disconnectedAt + ABSENCE_FORFEIT_MS - now);
 }
 
 export const opponentOf = (color: Color): Color => (color === 'w' ? 'b' : 'w');

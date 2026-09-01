@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { Color, EndReason, PieceType } from '@cm/engine';
 import { MINE_SRC, PIECE_VALUE, pieceSrc } from '../theme.js';
 import { useGame } from '../store.js';
@@ -14,8 +15,30 @@ export const END_TEXT: Record<EndReason, string> = {
   abandoned: 'Partida abandonada',
 };
 
+/**
+ * Cuenta atras hasta `deadline`, refrescada cada segundo. El store guarda el instante y no
+ * los segundos que faltan, asi que solo late este componente y no todo el estado.
+ */
+function useSecondsLeft(deadline: number | null): number | null {
+  const [left, setLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (deadline === null) {
+      setLeft(null);
+      return;
+    }
+    const tick = (): void => setLeft(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [deadline]);
+
+  return left;
+}
+
 export function Hud() {
   const s = useGame();
+  const secondsLeft = useSecondsLeft(s.online.opponentDeadline);
   const view = s.view;
   if (view === null) return null;
 
@@ -46,7 +69,9 @@ export function Hud() {
               ? 'Reconectando…'
               : s.online.opponentConnected
                 ? 'Rival conectado'
-                : 'Esperando al rival…'}
+                : secondsLeft === null
+                  ? 'Esperando al rival…'
+                  : `Esperando al rival… ${secondsLeft}s`}
           </span>
         </div>
       )}

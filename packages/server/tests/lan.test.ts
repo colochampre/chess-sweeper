@@ -9,7 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket, { type ClientOptions } from 'ws';
-import type { ServerMessage } from '@cm/engine';
+import { ABSENCE_FORFEIT_MS, type ServerMessage } from '@cm/engine';
 import { startServer, type RunningServer } from '../src/server.js';
 
 let server: RunningServer;
@@ -239,6 +239,32 @@ describe('FR-11 abandonar una partida', () => {
     guest.bye();
     await host.waitFor('opponent', (m) => m.t === 'opponent' && !m.connected);
     expect(await notReceived(host, 'moved')).toBe(true);
+
+    host.bye();
+  });
+
+  it('AC-1109: al ausentarse el rival, el que espera recibe cuanto le queda', async () => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('opponent', (m) => m.t === 'opponent' && m.connected);
+
+    guest.bye();
+    // Hay que exigir el plazo en el propio criterio: el anfitrion ya recibio un aviso de
+    // ausencia cuando estaba solo en la sala, y ese no lleva plazo porque entonces no habia
+    // rival a quien dar la victoria.
+    const away = await host.waitFor(
+      'opponent',
+      (m) => m.t === 'opponent' && !m.connected && m.msLeft !== undefined,
+    );
+    if (away.t !== 'opponent') return;
+
+    // El plazo llega y es el que corresponde: recien empieza a correr.
+    expect(away.msLeft).toBeGreaterThan(ABSENCE_FORFEIT_MS - 5_000);
+    expect(away.msLeft).toBeLessThanOrEqual(ABSENCE_FORFEIT_MS);
 
     host.bye();
   });

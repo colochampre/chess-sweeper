@@ -1,7 +1,8 @@
 # 003 — Partidas en red
 
 Estado: **activo** · Núcleo: `@cm/engine/room` · Transportes: `@cm/worker` (produccion) y
-`@cm/server` (LAN y desarrollo) · Tests: `packages/engine/tests/room.test.ts`
+`@cm/server` (LAN y desarrollo) · Tests: `packages/engine/tests/room.test.ts`,
+`packages/server/tests/lan.test.ts` (integracion) y `packages/client/tests/connect.test.ts`
 
 Servidor autoritativo. Guarda el `GameState` completo, con las minas, y a los clientes solo
 les manda `PlayerView`.
@@ -118,6 +119,20 @@ Un `socket.destroy()` a secas no deja al cliente ni un motivo: se queda en "Cone
   que ver con la que se pidio.
 - **AC-1002** Cuando ya no se va a reintentar y el servidor no explico nada, el cliente lo
   dice en vez de dejar un "Conectando..." eterno.
+- **AC-1003** Un cierre pedido por la propia aplicacion no se anuncia como fallo: salir al
+  menu es una decision del jugador, no un problema de red.
+- **AC-1004** Si hay un asiento guardado, volver a esa partida se ofrece nada mas abrir el
+  menu, sin tener que elegir antes el modo online. Estaba, pero enterrado bajo la opcion de
+  crear una sala nueva: para encontrar como volver habia que empezar por irse.
+- **AC-1005** Escribir el codigo de una sala en la que ya se tiene asiento reconecta a ese
+  asiento en vez de responder que la sala esta completa. Es la via que la gente usa por su
+  cuenta y tiene que funcionar.
+  El orden no es negociable: se pide sitio como jugador nuevo **primero**, y solo si la sala
+  rechaza se recurre a la credencial guardada. `localStorage` es del navegador y no de la
+  pestana, asi que dos pestanas comparten un unico asiento guardado: yendo por `resume` de
+  entrada, la segunda reclamaria el asiento de la primera y las dos jugarian con el mismo
+  color. Tener token para una sala no significa que el sitio libre sea el nuestro.
+  Si la credencial tampoco vale, se descarta y se muestra el rechazo.
 - **AC-1003** El codigo de sala se valida y se normaliza al escribirlo, no al enviarlo: lo
   que se ve en la caja es lo que se manda.
 
@@ -145,3 +160,6 @@ deja al rival esperando indefinidamente.
   de modo que los dos transportes y el cliente no necesitan un camino aparte.
 - **AC-1108** Al abandonar, el asiento queda libre. Quien se fue no sigue ocupando sitio en
   una partida que ya cedio, ni le impide volver a entrar por el codigo.
+- **AC-1109** Mientras el rival esta ausente, el cliente muestra cuanto le queda antes de
+  perder por abandono. Un plazo que corre en silencio obliga a elegir entre esperar sin
+  saber cuanto o irse.

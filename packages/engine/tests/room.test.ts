@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ABSENCE_FORFEIT_MS,
+  absenceMsLeft,
   ROOM_CODE_LENGTH,
   ROOM_TTL_MS,
   createRoom,
@@ -260,6 +261,33 @@ describe('FR-11 abandonar una partida', () => {
 
     expect(forfeitAbsent(r, t0 + ABSENCE_FORFEIT_MS + 1)).toBeNull();
     expect(r.game.status).toBe('playing');
+  });
+
+  it('AC-1109: mientras el rival esta ausente se sabe cuanto le queda', () => {
+    const { r, host } = started();
+    const t0 = Date.now();
+
+    // Con todos presentes no corre ningun plazo.
+    expect(absenceMsLeft(r, host.color, t0)).toBeNull();
+
+    markDisconnected(r, host.color, host.session, t0);
+    expect(absenceMsLeft(r, host.color, t0)).toBe(ABSENCE_FORFEIT_MS);
+    expect(absenceMsLeft(r, host.color, t0 + 30_000)).toBe(ABSENCE_FORFEIT_MS - 30_000);
+    // Nunca baja de cero, aunque la comprobacion llegue tarde.
+    expect(absenceMsLeft(r, host.color, t0 + ABSENCE_FORFEIT_MS * 2)).toBe(0);
+
+    // Y al volver deja de correr.
+    resumeSeat(r, host.token, t0 + 1000);
+    expect(absenceMsLeft(r, host.color, t0 + 2000)).toBeNull();
+  });
+
+  it('AC-1109: sin rival sentado no corre plazo: no hay a quien dar la victoria', () => {
+    const r = room();
+    const host = seatOf(takeSeat(r));
+    const t0 = Date.now();
+    markDisconnected(r, host.color, host.session, t0);
+
+    expect(absenceMsLeft(r, host.color, t0 + ABSENCE_FORFEIT_MS + 1)).toBeNull();
   });
 
   it('AC-1105: irse antes de que llegue el rival no da la victoria a nadie', () => {

@@ -90,6 +90,8 @@ interface AppState {
   showBalance: boolean;
   soundOn: boolean;
   error: string | null;
+  /** Salir de una partida online en curso la cede: se pregunta antes. */
+  confirmingLeave: boolean;
 
   startLocal: (options: LocalOptions) => void;
   restart: (overrides?: Partial<GameConfig>, seed?: number) => void;
@@ -97,6 +99,8 @@ interface AppState {
   joinOnline: (code: string) => void;
   resumeOnline: () => boolean;
   rematchOnline: () => void;
+  askLeave: () => void;
+  cancelLeave: () => void;
   backToMenu: () => void;
   clickSquare: (sq: Square) => void;
   rightClickSquare: (sq: Square) => void;
@@ -284,6 +288,7 @@ export const useGame = create<AppState>((set, get) => {
     view: null,
     flags: [],
     online: { code: null, connected: false, opponentConnected: false, waiting: false },
+    confirmingLeave: false,
 
     pieces: [],
     revealed: [],
@@ -379,6 +384,19 @@ export const useGame = create<AppState>((set, get) => {
 
     rematchOnline: () => socket?.send({ t: 'rematch' }),
 
+    /**
+     * Puerta unica del boton Menu. Solo hay algo que confirmar si irse tiene un coste:
+     * una partida online en curso se cede al salir. En local o ya terminada, se sale.
+     */
+    askLeave: () => {
+      const s = get();
+      const live = s.mode === 'online' && s.view !== null && s.view.status === 'playing';
+      if (!live) return s.backToMenu();
+      set({ confirmingLeave: true });
+    },
+
+    cancelLeave: () => set({ confirmingLeave: false }),
+
     backToMenu: () => {
       if (get().mode === 'online') {
         socket?.send({ t: 'leave' });
@@ -393,6 +411,7 @@ export const useGame = create<AppState>((set, get) => {
         selected: null,
         targets: [],
         online: { code: null, connected: false, opponentConnected: false, waiting: false },
+        confirmingLeave: false,
       });
     },
 

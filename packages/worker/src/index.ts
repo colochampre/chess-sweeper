@@ -17,13 +17,16 @@
  * LAN: los dos comparten la logica de `@cm/engine`.
  */
 import {
+  ABSENCE_FORFEIT_MS,
   ROOM_TTL_MS,
   WS_PATH,
   createRoom,
+  forfeitAbsent,
   generateRoomCode,
   isOriginAllowed,
   isRoomError,
   isStale,
+  leaveRoom,
   markDisconnected,
   opponentOf,
   parseIntent,
@@ -34,6 +37,7 @@ import {
   viewFor,
   type ClientMessage,
   type Color,
+  type GameEvent,
   type RoomState,
   type ServerMessage,
 } from '@cm/engine';
@@ -144,8 +148,27 @@ export class Room implements DurableObject {
 
   private async save(): Promise<void> {
     if (this.room !== null) await this.ctx.storage.put('room', this.room);
-    // La alarma limpia la sala si nadie vuelve.
-    await this.ctx.storage.setAlarm(Date.now() + ROOM_TTL_MS + 60_000);
+    await this.ctx.storage.setAlarm(this.nextAlarmAt());
+  }
+
+  /**
+   * Un Durable Object solo puede tener una alarma, asi que la manda la mas urgente: si hay
+   * alguien ausente en una partida viva hay que despertar a cobrarle el abandono, y si no,
+   * basta con volver a tiempo de limpiar la sala.
+   */
+  private nextAlarmAt(now = Date.now()): number {
+    if (this.room !== null && this.room.game.status === 'playing') {
+      const absences: number[] = [];
+      for (const color of ['w', 'b'] as const) {
+        const seat = this.room.seats[color];
+        if (seat && !seat.connected && seat.disconnectedAt !== null) {
+          absences.push(seat.disconnectedAt);
+        }
+      }
+      // Un segundo de margen: al despertar el plazo tiene que estar cumplido, no justo.
+      if (absences.length > 0) return Math.min(...absences) + ABSENCE_FORFEIT_MS + 1_000;
+    }
+    return now + ROOM_TTL_MS + 60_000;
   }
 
   private attachmentOf(ws: WebSocket): Attachment | null {
@@ -171,6 +194,15 @@ export class Room implements DurableObject {
       } catch {
         /* socket ya cerrado: la limpieza llega por webSocketClose */
       }
+    }
+  }
+
+  /** Los eventos llegan a los dos asientos con la vista de cada uno, sea un movimiento o
+   * un final por abandono: el cliente no necesita distinguirlos. */
+  private broadcastEvents(events: GameEvent[]): void {
+    if (this.room === null || events.length === 0) return;
+    for (const seatColor of ['w', 'b'] as const) {
+      this.send(seatColor, { t: 'moved', events, view: viewFor(this.room, seatColor) });
     }
   }
 
@@ -283,13 +315,7 @@ export class Room implements DurableObject {
           ws.send(encode({ t: 'sync', view: viewFor(this.room, color) }));
           return;
         }
-        for (const seatColor of ['w', 'b'] as const) {
-          this.send(seatColor, {
-            t: 'moved',
-            events: result.events,
-            view: viewFor(this.room, seatColor),
-          });
-        }
+        this.broadcastEvents(result.events);
         await this.save();
         return;
       }
@@ -319,8 +345,15 @@ export class Room implements DurableObject {
         return;
       }
 
-      case 'leave':
+      case 'leave': {
+        // Irse a proposito cuesta la partida; el cierre del socket por si solo no.
+        const result = leaveRoom(this.room, color);
+        if (!isRoomError(result)) {
+          this.broadcastEvents(result.events);
+          await this.save();
+        }
         return ws.close(1000, 'Salida voluntaria');
+      }
 
       default:
         return ws.send(encode({ t: 'error', message: 'Mensaje desconocido' }));
@@ -341,10 +374,21 @@ export class Room implements DurableObject {
     await this.webSocketClose(ws);
   }
 
-  /** Sala abandonada: se borra su almacenamiento en vez de dejarlo ahi para siempre. */
+  /**
+   * Despertar sirve para dos cosas: cobrar un abandono por ausencia y, cuando ya no queda
+   * nadie, borrar el almacenamiento en vez de dejarlo ahi para siempre.
+   */
   async alarm(): Promise<void> {
+    if (this.room !== null) {
+      const abandoned = forfeitAbsent(this.room);
+      if (abandoned) {
+        this.broadcastEvents(abandoned.events);
+        await this.save();
+        return;
+      }
+    }
     if (this.room !== null && !isStale(this.room)) {
-      await this.ctx.storage.setAlarm(Date.now() + ROOM_TTL_MS);
+      await this.ctx.storage.setAlarm(this.nextAlarmAt());
       return;
     }
     this.room = null;

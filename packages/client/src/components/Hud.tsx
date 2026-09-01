@@ -11,6 +11,7 @@ export const END_TEXT: Record<EndReason, string> = {
   'both-kings-destroyed': 'Los dos reyes han volado: tablas',
   'insufficient-material': 'Tablas por material insuficiente',
   'fifty-move': 'Tablas por la regla de 50 jugadas',
+  abandoned: 'Partida abandonada',
 };
 
 export function Hud() {
@@ -129,7 +130,7 @@ export function Hud() {
             {s.showBalance ? 'Ocultar' : 'Mostrar'} panel de balance
           </button>
         )}
-        <button className="ghost" onClick={s.backToMenu}>
+        <button className="ghost" onClick={s.askLeave}>
           Menu
         </button>
       </div>

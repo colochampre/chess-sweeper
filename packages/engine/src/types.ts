@@ -55,14 +55,17 @@ export type EndReason =
   | 'king-destroyed'
   | 'both-kings-destroyed'
   | 'insufficient-material'
-  | 'fifty-move';
+  | 'fifty-move'
+  /** Un jugador se fue de la partida, o se ausento el tiempo suficiente. Solo en online. */
+  | 'abandoned';
 
 export type GameStatus =
   | 'playing'
   | 'checkmate'
   | 'stalemate'
   | 'king-destroyed'
-  | 'draw';
+  | 'draw'
+  | 'abandoned';
 
 export interface CastlingRights {
   w: { k: boolean; q: boolean };

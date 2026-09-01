@@ -123,3 +123,23 @@ Un `socket.destroy()` a secas no deja al cliente ni un motivo: se queda en "Cone
 
 AC-1001 a AC-1003 se comprueban a mano con las dos pestanas; viven en la capa de WebSocket
 del navegador, no en logica que se pueda aislar.
+
+## FR-11 - Abandonar una partida
+
+Irse y perder la conexion no son lo mismo, y hasta ahora acababan en el mismo sitio: el
+asiento quedaba ocupado, la partida colgada y el que se iba no podia volver ni ceder.
+
+La regla separa los dos casos. Irse a proposito cuesta la partida; caerse no, pero tampoco
+deja al rival esperando indefinidamente.
+
+- **AC-1101** Salir al menu con una partida en curso pide confirmacion antes de nada.
+- **AC-1102** Al confirmar, la partida termina con motivo `abandoned` y gana el rival.
+- **AC-1103** Perder la conexion NO termina la partida: el asiento queda ausente y se
+  recupera con `resume` conservando la posicion.
+- **AC-1104** Una ausencia de mas de 2 minutos da la victoria al rival sin que este tenga
+  que pedir nada. Cerrar la pestana no puede salir mas barato que rendirse.
+- **AC-1105** Abandonar antes de que el rival se siente no da la victoria a nadie: el
+  asiento queda libre y la sala vuelve a admitir a alguien.
+- **AC-1106** Una partida ya terminada no se puede abandonar otra vez.
+- **AC-1107** El final por abandono viaja en el mismo evento `end` que cualquier otro final,
+  de modo que los dos transportes y el cliente no necesitan un camino aparte.

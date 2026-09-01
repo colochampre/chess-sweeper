@@ -199,3 +199,64 @@ describe('FR-9 los rechazos se explican', () => {
     expect(await client.opened).toBe(false);
   });
 });
+
+describe('FR-11 abandonar una partida', () => {
+  it('AC-1102/AC-1107: al abandonar, el rival recibe el final por el mismo evento `end`', async () => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+
+    const guest = connect(`a=join&code=${seated.code}`);
+    const guestSeated = await guest.waitFor('seated');
+    if (guestSeated.t !== 'seated') return;
+    await host.waitFor('opponent', (m) => m.t === 'opponent' && m.connected);
+
+    host.send({ t: 'leave' });
+
+    const ended = await guest.waitFor('moved');
+    if (ended.t !== 'moved') return;
+    expect(ended.events).toEqual([
+      { type: 'end', status: 'abandoned', winner: guestSeated.color, reason: 'abandoned' },
+    ]);
+    // Y la vista que acompana al evento ya viene con la partida terminada.
+    expect(ended.view.status).toBe('abandoned');
+    expect(ended.view.winner).toBe(guestSeated.color);
+
+    host.bye();
+    guest.bye();
+  });
+
+  it('AC-1103: caerse no termina la partida, solo marca ausencia', async () => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('opponent', (m) => m.t === 'opponent' && m.connected);
+
+    // Se corta sin avisar: el rival se entera de la ausencia, pero nadie gana todavia.
+    guest.bye();
+    await host.waitFor('opponent', (m) => m.t === 'opponent' && !m.connected);
+    expect(await notReceived(host, 'moved')).toBe(true);
+
+    host.bye();
+  });
+
+  it('AC-1105: irse antes de que llegue el rival deja el asiento libre', async () => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+
+    host.send({ t: 'leave' });
+    await new Promise((r) => setTimeout(r, 200));
+
+    // La sala sigue admitiendo a alguien: no quedo un asiento fantasma ocupandola.
+    const other = connect(`a=join&code=${seated.code}`);
+    const otherSeated = await other.waitFor('seated');
+    expect(otherSeated.t).toBe('seated');
+
+    host.bye();
+    other.bye();
+  });
+});

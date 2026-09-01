@@ -85,7 +85,7 @@ Lo que se anadio al salir de la red local, donde no hacia falta:
   en los dos transportes: mismo origen siempre; otro puerto solo si **los dos extremos** son
   locales, que es lo que permite desarrollar con Vite en el 5173 sin abrir la puerta a nadie;
   y si defines `ALLOWED_ORIGINS`, manda esa lista.
-- Tamano maximo por mensaje (4 KB) y limite de ritmo por sala.
+- Tamano maximo por mensaje (4 KB) y limite de ritmo por conexion.
 - Validacion estricta de los parametros de conexion, con el codigo de sala normalizado y el
   token comprobado contra el formato de UUID antes de tocar el almacenamiento.
 - *Heartbeat* en el servidor de LAN, para detectar conexiones que mueren en silencio.

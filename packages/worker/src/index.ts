@@ -21,6 +21,7 @@ import {
   WS_PATH,
   createRoom,
   generateRoomCode,
+  isOriginAllowed,
   isRoomError,
   isStale,
   markDisconnected,
@@ -64,17 +65,19 @@ interface Attachment {
 // Worker: valida, enruta hacia la sala y sirve el cliente compilado.
 // ---------------------------------------------------------------------------
 
+/**
+ * Adaptador sobre la politica compartida: aqui solo se traduce la peticion del Worker a la
+ * forma que espera `@cm/engine/origin`. La regla vive alli y es la misma que aplica el
+ * servidor de LAN, asi que los dos transportes no pueden divergir. Tener aqui una copia
+ * propia era justo lo que rompia el circuito de desarrollo: el Worker exigia el mismo host
+ * y rechazaba con 403 al cliente de Vite servido desde otro puerto.
+ */
 function originAllowed(request: Request, env: Env): boolean {
-  const origin = request.headers.get('Origin');
-  if (origin === null) return true; // clientes que no son navegador (tests, wscat)
-  const allowed = env.ALLOWED_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean);
-  try {
-    const host = new URL(origin).host;
-    if (allowed && allowed.length > 0) return allowed.includes(origin) || allowed.includes(host);
-    return host === new URL(request.url).host;
-  } catch {
-    return false;
-  }
+  return isOriginAllowed({
+    origin: request.headers.get('Origin'),
+    host: new URL(request.url).host,
+    allowed: env.ALLOWED_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean),
+  });
 }
 
 /**

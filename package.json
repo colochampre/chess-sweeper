@@ -14,9 +14,11 @@
     "dev:server": "npm run dev --workspace @cm/server",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit -p packages/engine && tsc --noEmit -p packages/ai && tsc --noEmit -p packages/client && tsc --noEmit -p packages/server && tsc --noEmit -p tools/balance",
+    "typecheck": "tsc --noEmit -p packages/engine && tsc --noEmit -p packages/ai && tsc --noEmit -p packages/client && tsc --noEmit -p packages/server && tsc --noEmit -p packages/worker && tsc --noEmit -p tools/balance",
     "balance": "tsx tools/balance/simulate.ts",
-    "start": "npm run build && npm run start --workspace @cm/server"
+    "start": "npm run build && npm run start --workspace @cm/server",
+    "dev:worker": "npm run dev --workspace @cm/worker",
+    "deploy": "npm run build && npm run deploy --workspace @cm/worker"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

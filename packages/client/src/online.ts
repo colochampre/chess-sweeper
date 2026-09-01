@@ -1,4 +1,11 @@
-import type { ClientMessage, ServerMessage } from '@cm/engine';
+import {
+  CLOSE_REFUSED,
+  WS_PATH,
+  intentToQuery,
+  type ClientMessage,
+  type ConnectIntent,
+  type ServerMessage,
+} from '@cm/engine';
 
 const SEAT_KEY = 'cm-online-seat';
 
@@ -33,63 +40,86 @@ export const clearSeat = (): void => {
 };
 
 /**
- * En desarrollo el cliente vive en el 5173 de Vite y el servidor en el 8787.
- * En produccion el propio servidor sirve el cliente, asi que basta con su mismo origen.
+ * En produccion el propio servidor (el Worker de Cloudflare) sirve el cliente, asi que
+ * basta con su mismo origen. En desarrollo el cliente vive en el 5173 de Vite y el
+ * servidor de LAN en el 8787.
  */
-export function defaultServerUrl(): string {
+export function serverBase(): string {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const port = location.port === '5173' ? '8787' : location.port;
   return `${proto}//${location.hostname}${port ? `:${port}` : ''}`;
 }
 
+/** A que sala se entra va en la URL, no en un mensaje: es lo que enruta hacia su sala. */
+const socketUrl = (intent: ConnectIntent): string =>
+  `${serverBase()}${WS_PATH}?${intentToQuery(intent)}`;
+
 export interface OnlineHandlers {
   onMessage(message: ServerMessage): void;
-  /** `reconnected` es true cuando se recupera una conexion caida, no en la primera. */
-  onOpen(reconnected: boolean): void;
-  onClose(): void;
+  onOpen(): void;
+  /** `willRetry` en false significa que ya no se va a intentar mas. */
+  onClose(willRetry: boolean): void;
 }
 
-/** Conexion al servidor con reintentos: en LAN una caida suele ser momentanea. */
+/** Conexion al servidor con reintentos: una caida suele ser momentanea. */
 export class OnlineClient {
   private socket: WebSocket | null = null;
+  private intent: ConnectIntent | null = null;
   private attempts = 0;
   private closedByUs = false;
   private timer: number | null = null;
+  /** Si esta conexion llego a sentarse en la sala. Decide si tiene sentido reintentar. */
+  private seated = false;
   /** Mensajes pedidos antes de que el socket estuviera abierto. */
   private queue: ClientMessage[] = [];
 
-  constructor(
-    private readonly url: string,
-    private readonly handlers: OnlineHandlers,
-  ) {}
+  constructor(private readonly handlers: OnlineHandlers) {}
 
-  connect(): void {
+  connect(intent: ConnectIntent): void {
+    this.intent = intent;
     this.closedByUs = false;
-    const socket = new WebSocket(this.url);
+    this.attempts = 0;
+    this.seated = false;
+    this.open();
+  }
+
+  private open(): void {
+    if (this.intent === null) return;
+    const socket = new WebSocket(socketUrl(this.intent));
     this.socket = socket;
 
     socket.onopen = () => {
-      const reconnected = this.attempts > 0;
       this.attempts = 0;
-      // Primero el handler (que puede enviar `resume`), y despues lo que quedo en cola.
-      this.handlers.onOpen(reconnected);
+      this.handlers.onOpen();
       const pending = this.queue;
       this.queue = [];
       for (const message of pending) socket.send(JSON.stringify(message));
     };
     socket.onmessage = (event) => {
       try {
-        this.handlers.onMessage(JSON.parse(String(event.data)) as ServerMessage);
+        const message = JSON.parse(String(event.data)) as ServerMessage;
+        if (message.t === 'seated') this.seated = true;
+        this.handlers.onMessage(message);
       } catch {
         /* mensaje ilegible: lo ignoramos en vez de tumbar la partida */
       }
     };
-    socket.onclose = () => {
-      this.handlers.onClose();
-      if (this.closedByUs || this.attempts >= 6) return;
-      const delay = Math.min(8000, 400 * 2 ** this.attempts);
+    socket.onclose = (event) => {
+      if (this.closedByUs) return this.handlers.onClose(false);
+
+      const seat = loadSeat();
+      // Solo se reintenta una conexion que LLEGO A SENTARSE. Si nunca se sento, el problema
+      // no es la red y volver a intentarlo no arregla nada: reintentar un `create` fabricaria
+      // una sala huerfana por intento, y reintentar un `join` fallido acabaria entrando por
+      // `resume` a una partida anterior que no tiene nada que ver con la que se pidio.
+      const retry =
+        this.seated && seat !== null && event.code !== CLOSE_REFUSED && this.attempts < 6;
+      this.handlers.onClose(retry);
+      if (!retry) return;
+
+      this.intent = { a: 'resume', code: seat.code, token: seat.token };
+      this.timer = window.setTimeout(() => this.open(), Math.min(8000, 400 * 2 ** this.attempts));
       this.attempts++;
-      this.timer = window.setTimeout(() => this.connect(), delay);
     };
     socket.onerror = () => socket.close();
   }

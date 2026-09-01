@@ -21,6 +21,14 @@ export interface AnimApi {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * En una pestana de fondo el navegador congela la linea de tiempo de las animaciones, asi
+ * que `animation.finished` no resuelve nunca. Si se esperara, la partida se quedaria
+ * bloqueada a media jugada mientras miras otra pestana. Aqui se salta la animacion y se
+ * coloca la pieza directamente: al volver, el tablero ya esta al dia.
+ */
+const hidden = (): boolean => typeof document !== 'undefined' && document.hidden;
+
 /** Un arco por casilla: la pieza avanza a saltitos en vez de deslizarse. */
 async function animateHops(
   pieceId: string,
@@ -32,9 +40,9 @@ async function animateHops(
   playPath(cells.length, ANIM.hop);
 
   const el = pieceElement(pieceId);
-  if (!el || typeof el.animate !== 'function') {
+  if (!el || typeof el.animate !== 'function' || hidden()) {
     api.setPieceSquare(pieceId, last);
-    await sleep(ANIM.hop * cells.length);
+    if (!hidden()) await sleep(ANIM.hop * cells.length);
     return;
   }
 
@@ -61,11 +69,10 @@ async function animateHops(
     });
   }
 
-  const animation = el.animate(frames, {
-    duration: ANIM.hop * cells.length,
-    fill: 'forwards',
-  });
-  await animation.finished.catch(() => undefined);
+  const duration = ANIM.hop * cells.length;
+  const animation = el.animate(frames, { duration, fill: 'forwards' });
+  // Red de seguridad: si por lo que sea la animacion no termina, la partida sigue.
+  await Promise.race([animation.finished.catch(() => undefined), sleep(duration + 500)]);
   api.setPieceSquare(pieceId, last);
   requestAnimationFrame(() => animation.cancel());
 }
@@ -97,7 +104,7 @@ export async function playEvents(events: GameEvent[], api: AnimApi): Promise<voi
       case 'capture':
         playCapture();
         api.markDying(ev.pieceId);
-        await sleep(ANIM.capture);
+        if (!hidden()) await sleep(ANIM.capture);
         api.removePiece(ev.pieceId);
         break;
       case 'explosion':
@@ -105,14 +112,14 @@ export async function playEvents(events: GameEvent[], api: AnimApi): Promise<voi
         api.burnCells(ev.cells, ev.center);
         api.setBlasts(ev.cells);
         for (const v of ev.victims) api.markDying(v.pieceId);
-        await sleep(ANIM.explosion * 0.45);
+        if (!hidden()) await sleep(ANIM.explosion * 0.45);
         for (const v of ev.victims) api.removePiece(v.pieceId);
-        await sleep(ANIM.explosion * 0.55);
+        if (!hidden()) await sleep(ANIM.explosion * 0.55);
         api.setBlasts([]);
         break;
       case 'reveal':
         api.reveal(ev.cells);
-        await sleep(ANIM.reveal);
+        if (!hidden()) await sleep(ANIM.reveal);
         break;
       case 'promotion':
         playHop();

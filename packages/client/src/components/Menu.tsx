@@ -1,5 +1,14 @@
 import { useState } from 'react';
-import { MINE_DENSITY, configFor, mineRowRange, type Color, type Difficulty } from '@cm/engine';
+import {
+  MINE_DENSITY,
+  ROOM_CODE_LENGTH,
+  configFor,
+  isValidRoomCode,
+  mineRowRange,
+  normalizeRoomCode,
+  type Color,
+  type Difficulty,
+} from '@cm/engine';
 import { MINE_SRC, pieceSrc } from '../theme.js';
 import { useGame, type Mode } from '../store.js';
 import { loadSeat } from '../online.js';
@@ -7,7 +16,7 @@ import { loadSeat } from '../online.js';
 const MODES: { value: Mode; label: string; hint: string }[] = [
   { value: 'hotseat', label: 'Dos jugadores', hint: 'Mismo dispositivo, el tablero gira en cada turno' },
   { value: 'bot', label: 'Contra la maquina', hint: 'Elige la fuerza del rival' },
-  { value: 'online', label: 'Online (LAN)', hint: 'Crea una sala o entra con un codigo' },
+  { value: 'online', label: 'Online', hint: 'Crea una sala o entra con un codigo' },
 ];
 
 const DIFFICULTIES: { value: Difficulty; label: string }[] = [
@@ -150,11 +159,13 @@ export function Menu() {
             <input
               placeholder="Codigo de sala"
               value={joinCode}
-              maxLength={6}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              onKeyDown={(e) => e.key === 'Enter' && joinCode && joinOnline(joinCode)}
+              maxLength={ROOM_CODE_LENGTH}
+              // Se normaliza al escribir, no al enviar: asi lo que se ve en la caja es
+              // exactamente lo que se va a mandar, y el boton no miente sobre si vale.
+              onChange={(e) => setJoinCode(normalizeRoomCode(e.target.value))}
+              onKeyDown={(e) => e.key === 'Enter' && isValidRoomCode(joinCode) && joinOnline(joinCode)}
             />
-            <button disabled={joinCode.length < 6} onClick={() => joinOnline(joinCode)}>
+            <button disabled={!isValidRoomCode(joinCode)} onClick={() => joinOnline(joinCode)}>
               Unirse
             </button>
           </div>
@@ -164,8 +175,8 @@ export function Menu() {
             </button>
           )}
           <p className="hint">
-            El servidor se levanta con <code>npm run dev:server</code>. Los demas jugadores entran
-            por la IP de tu equipo en la red local.
+            Crea una sala y pasale el codigo a tu rival. En local, el servidor se levanta con{' '}
+            <code>npm run dev:worker</code>.
           </p>
         </section>
       ) : (

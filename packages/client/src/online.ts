@@ -1,4 +1,5 @@
 import {
+  CLOSE_REFUSED,
   WS_PATH,
   intentToQuery,
   type ClientMessage,
@@ -56,7 +57,8 @@ const socketUrl = (intent: ConnectIntent): string =>
 export interface OnlineHandlers {
   onMessage(message: ServerMessage): void;
   onOpen(): void;
-  onClose(): void;
+  /** `willRetry` en false significa que ya no se va a intentar mas. */
+  onClose(willRetry: boolean): void;
 }
 
 /** Conexion al servidor con reintentos: una caida suele ser momentanea. */
@@ -66,6 +68,8 @@ export class OnlineClient {
   private attempts = 0;
   private closedByUs = false;
   private timer: number | null = null;
+  /** Si esta conexion llego a sentarse en la sala. Decide si tiene sentido reintentar. */
+  private seated = false;
   /** Mensajes pedidos antes de que el socket estuviera abierto. */
   private queue: ClientMessage[] = [];
 
@@ -75,6 +79,7 @@ export class OnlineClient {
     this.intent = intent;
     this.closedByUs = false;
     this.attempts = 0;
+    this.seated = false;
     this.open();
   }
 
@@ -92,18 +97,27 @@ export class OnlineClient {
     };
     socket.onmessage = (event) => {
       try {
-        this.handlers.onMessage(JSON.parse(String(event.data)) as ServerMessage);
+        const message = JSON.parse(String(event.data)) as ServerMessage;
+        if (message.t === 'seated') this.seated = true;
+        this.handlers.onMessage(message);
       } catch {
         /* mensaje ilegible: lo ignoramos en vez de tumbar la partida */
       }
     };
-    socket.onclose = () => {
-      this.handlers.onClose();
-      if (this.closedByUs || this.attempts >= 6) return;
-      // Al reconectar se reclama el asiento con su credencial; crear otra sala seria
-      // justo lo contrario de lo que quiere quien se ha quedado sin conexion.
+    socket.onclose = (event) => {
+      if (this.closedByUs) return this.handlers.onClose(false);
+
       const seat = loadSeat();
-      if (seat) this.intent = { a: 'resume', code: seat.code, token: seat.token };
+      // Solo se reintenta una conexion que LLEGO A SENTARSE. Si nunca se sento, el problema
+      // no es la red y volver a intentarlo no arregla nada: reintentar un `create` fabricaria
+      // una sala huerfana por intento, y reintentar un `join` fallido acabaria entrando por
+      // `resume` a una partida anterior que no tiene nada que ver con la que se pidio.
+      const retry =
+        this.seated && seat !== null && event.code !== CLOSE_REFUSED && this.attempts < 6;
+      this.handlers.onClose(retry);
+      if (!retry) return;
+
+      this.intent = { a: 'resume', code: seat.code, token: seat.token };
       this.timer = window.setTimeout(() => this.open(), Math.min(8000, 400 * 2 ** this.attempts));
       this.attempts++;
     };

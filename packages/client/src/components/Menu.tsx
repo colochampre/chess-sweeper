@@ -1,5 +1,14 @@
 import { useState } from 'react';
-import { MINE_DENSITY, configFor, mineRowRange, type Color, type Difficulty } from '@cm/engine';
+import {
+  MINE_DENSITY,
+  ROOM_CODE_LENGTH,
+  configFor,
+  isValidRoomCode,
+  mineRowRange,
+  normalizeRoomCode,
+  type Color,
+  type Difficulty,
+} from '@cm/engine';
 import { MINE_SRC, pieceSrc } from '../theme.js';
 import { useGame, type Mode } from '../store.js';
 import { loadSeat } from '../online.js';
@@ -150,11 +159,13 @@ export function Menu() {
             <input
               placeholder="Codigo de sala"
               value={joinCode}
-              maxLength={6}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              onKeyDown={(e) => e.key === 'Enter' && joinCode && joinOnline(joinCode)}
+              maxLength={ROOM_CODE_LENGTH}
+              // Se normaliza al escribir, no al enviar: asi lo que se ve en la caja es
+              // exactamente lo que se va a mandar, y el boton no miente sobre si vale.
+              onChange={(e) => setJoinCode(normalizeRoomCode(e.target.value))}
+              onKeyDown={(e) => e.key === 'Enter' && isValidRoomCode(joinCode) && joinOnline(joinCode)}
             />
-            <button disabled={joinCode.length < 6} onClick={() => joinOnline(joinCode)}>
+            <button disabled={!isValidRoomCode(joinCode)} onClick={() => joinOnline(joinCode)}>
               Unirse
             </button>
           </div>

@@ -18,6 +18,7 @@ import {
   type PlayerView,
   type RoomSettings,
   type ServerMessage,
+  isValidRoomCode,
   normalizeRoomCode,
   type Square,
 } from '@cm/engine';
@@ -255,7 +256,16 @@ export const useGame = create<AppState>((set, get) => {
       socket = new OnlineClient({
         onMessage: onServerMessage,
         onOpen: () => set({ online: { ...get().online, connected: true } }),
-        onClose: () => set({ online: { ...get().online, connected: false } }),
+        onClose: (willRetry) => {
+          const s = get();
+          set({ online: { ...s.online, connected: false } });
+          // Si el servidor explico el motivo ya hay un error puesto; si no lo hizo (origen
+          // rechazado, parametros invalidos, servidor caido) el cliente se quedaria mirando
+          // un "Conectando..." eterno.
+          if (!willRetry && s.error === null) {
+            set({ error: 'No se pudo conectar con el servidor.' });
+          }
+        },
       });
     }
     return socket;
@@ -348,8 +358,15 @@ export const useGame = create<AppState>((set, get) => {
     },
 
     joinOnline: (code) => {
+      // Se valida aqui: un codigo mal formado no llega ni a WebSocket, asi que el servidor
+      // no tendria por donde contestar y el usuario se quedaria esperando sin motivo.
+      const clean = normalizeRoomCode(code);
+      if (!isValidRoomCode(clean)) {
+        set({ error: `"${clean}" no es un codigo de sala valido: son 6 caracteres.` });
+        return;
+      }
       set({ screen: 'lobby', mode: 'online', error: null });
-      ensureSocket().connect({ a: 'join', code: normalizeRoomCode(code) });
+      ensureSocket().connect({ a: 'join', code: clean });
     },
 
     resumeOnline: () => {

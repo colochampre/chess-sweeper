@@ -52,6 +52,12 @@ export interface OnlineInfo {
   connected: boolean;
   opponentConnected: boolean;
   waiting: boolean;
+  /**
+   * Momento en que el rival ausente pierde por abandono, o `null` si no corre plazo. Se
+   * guarda como instante y no como cuenta atras para que el HUD pueda refrescarla sin que
+   * el store tenga que latir cada segundo.
+   */
+  opponentDeadline: number | null;
 }
 
 interface AppState {
@@ -132,6 +138,13 @@ const renderLayer = (view: PlayerView) => ({
 
 let socket: OnlineClient | null = null;
 
+/**
+ * Codigo de sala al que se entro reusando un asiento guardado. Si el servidor rechaza esa
+ * credencial (la sala ya no existe, o el asiento dejo de ser suyo) se entra como jugador
+ * nuevo en vez de mostrar un error que el jugador no puede accionar.
+ */
+let retryAsNewPlayer: string | null = null;
+
 export const useGame = create<AppState>((set, get) => {
   const animApi = (config: GameConfig): AnimApi => ({
     config,
@@ -210,6 +223,7 @@ export const useGame = create<AppState>((set, get) => {
     const s = get();
     switch (message.t) {
       case 'seated':
+        retryAsNewPlayer = null;
         saveSeat({ code: message.code, token: message.token });
         set({
           screen: 'game',
@@ -246,12 +260,26 @@ export const useGame = create<AppState>((set, get) => {
       }
       case 'opponent':
         set({
-          online: { ...get().online, opponentConnected: message.connected, waiting: !message.connected },
+          online: {
+            ...get().online,
+            opponentConnected: message.connected,
+            waiting: !message.connected,
+            opponentDeadline: message.msLeft === undefined ? null : Date.now() + message.msLeft,
+          },
         });
         break;
-      case 'error':
+      case 'error': {
+        // Credencial guardada que ya no vale: se descarta y se entra como jugador nuevo.
+        const stale = retryAsNewPlayer;
+        retryAsNewPlayer = null;
+        if (stale !== null) {
+          clearSeat();
+          socket?.connect({ a: 'join', code: stale });
+          break;
+        }
         set({ error: message.message });
         break;
+      }
     }
   };
 
@@ -287,7 +315,7 @@ export const useGame = create<AppState>((set, get) => {
     engine: null,
     view: null,
     flags: [],
-    online: { code: null, connected: false, opponentConnected: false, waiting: false },
+    online: { code: null, connected: false, opponentConnected: false, waiting: false, opponentDeadline: null },
     confirmingLeave: false,
 
     pieces: [],
@@ -329,7 +357,7 @@ export const useGame = create<AppState>((set, get) => {
         engine,
         view,
         flags: new Array<boolean>(engine.board.length).fill(false),
-        online: { code: null, connected: false, opponentConnected: false, waiting: false },
+        online: { code: null, connected: false, opponentConnected: false, waiting: false, opponentDeadline: null },
         ...renderLayer(view),
         animating: false,
         selected: null,
@@ -371,6 +399,16 @@ export const useGame = create<AppState>((set, get) => {
         return;
       }
       set({ screen: 'lobby', mode: 'online', error: null });
+
+      // Si ya hay asiento en esa sala, se vuelve a el en vez de pedir uno nuevo: escribir el
+      // codigo de tu propia partida es lo que hace la gente, y responderle "la sala esta
+      // completa" es contarle que su propio asiento le bloquea la entrada.
+      const seat = loadSeat();
+      if (seat !== null && seat.code === clean) {
+        retryAsNewPlayer = clean;
+        ensureSocket().connect({ a: 'resume', code: clean, token: seat.token });
+        return;
+      }
       ensureSocket().connect({ a: 'join', code: clean });
     },
 
@@ -403,6 +441,7 @@ export const useGame = create<AppState>((set, get) => {
         socket?.close();
         socket = null;
         clearSeat();
+        retryAsNewPlayer = null;
       }
       set({
         screen: 'menu',
@@ -410,7 +449,7 @@ export const useGame = create<AppState>((set, get) => {
         view: null,
         selected: null,
         targets: [],
-        online: { code: null, connected: false, opponentConnected: false, waiting: false },
+        online: { code: null, connected: false, opponentConnected: false, waiting: false, opponentDeadline: null },
         confirmingLeave: false,
       });
     },

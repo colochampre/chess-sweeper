@@ -57,6 +57,19 @@ export function Menu() {
 
       {error && <div className="panel error">{error}</div>}
 
+      {savedSeat && (
+        <section>
+          <h2>Tenes una partida sin terminar</h2>
+          <p className="hint">
+            Sala <code>{savedSeat.code}</code>. Volves a tu asiento con la posicion como la
+            dejaste. Si tardas demasiado, tu rival gana por abandono.
+          </p>
+          <button className="primary" onClick={() => resumeOnline()}>
+            Volver a mi partida
+          </button>
+        </section>
+      )}
+
       <section>
         <h2>Modo de juego</h2>
         <div className="options">
@@ -169,11 +182,6 @@ export function Menu() {
               Unirse
             </button>
           </div>
-          {savedSeat && (
-            <button className="ghost" onClick={() => resumeOnline()}>
-              Volver a mi partida ({savedSeat.code})
-            </button>
-          )}
           <p className="hint">
             Crea una sala y pasale el codigo a tu rival. En local, el servidor se levanta con{' '}
             <code>npm run dev:worker</code>.

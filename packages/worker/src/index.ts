@@ -20,6 +20,7 @@ import {
   ABSENCE_FORFEIT_MS,
   ROOM_TTL_MS,
   WS_PATH,
+  absenceMsLeft,
   createRoom,
   forfeitAbsent,
   generateRoomCode,
@@ -209,9 +210,14 @@ export class Room implements DurableObject {
   private broadcastPresence(): void {
     if (this.room === null) return;
     for (const color of ['w', 'b'] as const) {
+      const rival = opponentOf(color);
+      // Si el rival esta ausente, se manda tambien cuanto le queda: esperar sin saber
+      // cuanto obliga a elegir entre quedarse a ciegas o irse.
+      const msLeft = absenceMsLeft(this.room, rival);
       this.send(color, {
         t: 'opponent',
-        connected: this.room.seats[opponentOf(color)]?.connected === true,
+        connected: this.room.seats[rival]?.connected === true,
+        ...(msLeft === null ? {} : { msLeft }),
       });
     }
   }

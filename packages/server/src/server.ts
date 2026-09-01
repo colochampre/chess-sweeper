@@ -17,6 +17,7 @@ import {
   CLOSE_REFUSED,
   CLOSE_REPLACED,
   WS_PATH,
+  absenceMsLeft,
   createRoom,
   forfeitAbsent,
   generateRoomCode,
@@ -116,7 +117,15 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     for (const color of ['w', 'b'] as const) {
       const socket = members.get(room.code)?.get(color);
       if (!socket) continue;
-      send(socket, { t: 'opponent', connected: room.seats[opponentOf(color)]?.connected === true });
+      const rival = opponentOf(color);
+      // Si el rival esta ausente, se manda tambien cuanto le queda: esperar sin saber
+      // cuanto obliga a elegir entre quedarse a ciegas o irse.
+      const msLeft = absenceMsLeft(room, rival);
+      send(socket, {
+        t: 'opponent',
+        connected: room.seats[rival]?.connected === true,
+        ...(msLeft === null ? {} : { msLeft }),
+      });
     }
   }
 

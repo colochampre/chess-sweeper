@@ -39,7 +39,8 @@ export type ServerMessage =
   | { t: 'sync'; view: PlayerView }
   /** Un movimiento aplicado: primero se reproduce la animacion, luego manda `view`. */
   | { t: 'moved'; events: GameEvent[]; view: PlayerView }
-  | { t: 'opponent'; connected: boolean }
+  /** Presencia del rival. Si esta ausente, `msLeft` dice cuanto le queda antes de perder. */
+  | { t: 'opponent'; connected: boolean; msLeft?: number }
   | { t: 'error'; message: string };
 
 /**

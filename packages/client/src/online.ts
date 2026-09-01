@@ -14,6 +14,30 @@ export interface SavedSeat {
   token: string;
 }
 
+/**
+ * Que intentar al entrar por codigo, y con que reserva si el servidor rechaza.
+ *
+ * Se entra como jugador nuevo PRIMERO y solo se recurre a la credencial guardada si la sala
+ * responde que no hay sitio. El orden inverso parece equivalente y no lo es: `localStorage`
+ * es del navegador, no de la pestana, asi que dos pestanas del mismo navegador comparten un
+ * unico asiento guardado. Yendo por `resume` de entrada, la segunda pestana reclamaria el
+ * asiento de la primera y las dos acabarian jugando con el mismo color.
+ *
+ * Tener token para una sala no significa que el sitio libre sea el nuestro.
+ */
+export function planConnect(
+  code: string,
+  saved: SavedSeat | null,
+): { first: ConnectIntent; fallback: ConnectIntent | null } {
+  return {
+    first: { a: 'join', code },
+    fallback:
+      saved !== null && saved.code === code
+        ? { a: 'resume', code, token: saved.token }
+        : null,
+  };
+}
+
 export const loadSeat = (): SavedSeat | null => {
   try {
     const raw = localStorage.getItem(SEAT_KEY);

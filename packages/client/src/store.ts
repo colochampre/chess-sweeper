@@ -21,9 +21,10 @@ import {
   isValidRoomCode,
   normalizeRoomCode,
   type Square,
+  type ConnectIntent,
 } from '@cm/engine';
 import { playEvents, type AnimApi } from './anim/eventPlayer.js';
-import { OnlineClient, clearSeat, loadSeat, saveSeat } from './online.js';
+import { OnlineClient, clearSeat, loadSeat, planConnect, saveSeat } from './online.js';
 import { playOutcome, setSoundEnabled, soundEnabled } from './sfx.js';
 import { ANIM } from './theme.js';
 
@@ -139,11 +140,12 @@ const renderLayer = (view: PlayerView) => ({
 let socket: OnlineClient | null = null;
 
 /**
- * Codigo de sala al que se entro reusando un asiento guardado. Si el servidor rechaza esa
- * credencial (la sala ya no existe, o el asiento dejo de ser suyo) se entra como jugador
- * nuevo en vez de mostrar un error que el jugador no puede accionar.
+ * Credencial guardada para la sala a la que se esta entrando, todavia sin usar. Se prueba
+ * solo si el servidor rechaza la entrada normal: el sitio que falta puede ser el nuestro.
  */
-let retryAsNewPlayer: string | null = null;
+let seatFallback: ConnectIntent | null = null;
+/** Se esta probando esa credencial. Si tambien la rechazan, ya no vale. */
+let tryingSeatFallback = false;
 
 export const useGame = create<AppState>((set, get) => {
   const animApi = (config: GameConfig): AnimApi => ({
@@ -223,7 +225,8 @@ export const useGame = create<AppState>((set, get) => {
     const s = get();
     switch (message.t) {
       case 'seated':
-        retryAsNewPlayer = null;
+        seatFallback = null;
+        tryingSeatFallback = false;
         saveSeat({ code: message.code, token: message.token });
         set({
           screen: 'game',
@@ -269,13 +272,19 @@ export const useGame = create<AppState>((set, get) => {
         });
         break;
       case 'error': {
-        // Credencial guardada que ya no vale: se descarta y se entra como jugador nuevo.
-        const stale = retryAsNewPlayer;
-        retryAsNewPlayer = null;
-        if (stale !== null) {
-          clearSeat();
-          socket?.connect({ a: 'join', code: stale });
+        // La sala rechaza, pero hay credencial guardada para ella: el sitio que falta puede
+        // ser el nuestro. Se prueba antes de dar el rechazo por bueno.
+        if (seatFallback !== null) {
+          const fallback = seatFallback;
+          seatFallback = null;
+          tryingSeatFallback = true;
+          socket?.connect(fallback);
           break;
+        }
+        // Ni como jugador nuevo ni con la credencial: esa credencial ya no sirve.
+        if (tryingSeatFallback) {
+          tryingSeatFallback = false;
+          clearSeat();
         }
         set({ error: message.message });
         break;
@@ -400,16 +409,14 @@ export const useGame = create<AppState>((set, get) => {
       }
       set({ screen: 'lobby', mode: 'online', error: null });
 
-      // Si ya hay asiento en esa sala, se vuelve a el en vez de pedir uno nuevo: escribir el
-      // codigo de tu propia partida es lo que hace la gente, y responderle "la sala esta
-      // completa" es contarle que su propio asiento le bloquea la entrada.
-      const seat = loadSeat();
-      if (seat !== null && seat.code === clean) {
-        retryAsNewPlayer = clean;
-        ensureSocket().connect({ a: 'resume', code: clean, token: seat.token });
-        return;
-      }
-      ensureSocket().connect({ a: 'join', code: clean });
+      // Escribir el codigo de tu propia partida es lo que hace la gente para volver, y
+      // responderle "la sala esta completa" es contarle que su propio asiento le bloquea la
+      // entrada. Pero el orden importa: primero se pide sitio y solo despues se recurre a la
+      // credencial. Ver `planConnect`.
+      const plan = planConnect(clean, loadSeat());
+      seatFallback = plan.fallback;
+      tryingSeatFallback = false;
+      ensureSocket().connect(plan.first);
     },
 
     resumeOnline: () => {
@@ -441,7 +448,8 @@ export const useGame = create<AppState>((set, get) => {
         socket?.close();
         socket = null;
         clearSeat();
-        retryAsNewPlayer = null;
+        seatFallback = null;
+        tryingSeatFallback = false;
       }
       set({
         screen: 'menu',

@@ -4,8 +4,11 @@ import {
   intentToQuery,
   type ClientMessage,
   type ConnectIntent,
+  type GameStatus,
   type ServerMessage,
 } from '@cm/engine';
+// Solo el tipo: se borra al compilar, asi que no crea un ciclo con `store.ts`.
+import type { Mode } from './store.js';
 
 const SEAT_KEY = 'cm-online-seat';
 
@@ -179,17 +182,23 @@ export interface DrawButton {
 }
 
 /**
- * Estado del boton de tablas, en funcion del acuerdo que reporta el servidor.
+ * Estado del boton de tablas, o `null` si no va ninguno.
  *
- * Es puro a proposito: el cliente no tiene montaje de DOM en los tests, asi que la decision
- * se comprueba sin navegador. Y `movesLeft` lo cuenta el servidor (`drawMovesLeft` en el
- * motor), de modo que el boton no ofrezca lo que el servidor va a rechazar.
+ * Si se muestra o no se decide aqui y no en el JSX, para que sea comprobable: el cliente no
+ * tiene montaje de DOM en los tests, asi que toda la decision vive en esta funcion pura. Y
+ * `movesLeft` lo cuenta el servidor (`drawMovesLeft` en el motor), de modo que el boton no
+ * ofrezca lo que el servidor va a rechazar.
  */
 export function drawButton(offer: {
+  mode: Mode;
+  status: GameStatus;
   mine: boolean;
   theirs: boolean;
   movesLeft: number;
-}): DrawButton {
+}): DrawButton | null {
+  // Contra la maquina no hay con quien acordar, y en hotseat los dos jugadores ya comparten
+  // la mesa. Y con la partida terminada lo que se ofrece es la revancha, no las tablas.
+  if (offer.mode !== 'online' || offer.status !== 'playing') return null;
   // Deber jugadas antes de volver a ofrecer no impide decir que si: son cosas distintas.
   if (offer.theirs) return { label: 'Aceptar tablas', action: 'accept', disabled: false };
   if (offer.mine) return { label: 'Tablas ofrecidas', action: 'offer', disabled: true };

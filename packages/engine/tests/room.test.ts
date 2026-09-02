@@ -479,6 +479,16 @@ describe('FR-13 ofrecer tablas', () => {
     expect(r.game.status).toBe('playing');
   });
 
+  it('AC-1307: la oferta no se puede retirar, ni rechazandose a uno mismo', () => {
+    const { r, host } = playing();
+
+    offerDraw(r, host.color);
+    // No hay mensaje para retirarla, y rechazar mira la oferta del RIVAL: rechazarse a uno
+    // mismo seria la retirada por la puerta de atras.
+    expect(isRoomError(declineDraw(r, host.color))).toBe(true);
+    expect(r.seats[host.color]?.offersDraw).toBe(true);
+  });
+
   it('AC-1306: que el rival mueva retira la oferta; el propio movimiento no', () => {
     const { r, host, guest } = playing();
     r.game.mines.fill(false); // sin detonaciones: aqui se mide el acuerdo, no el tablero
@@ -566,5 +576,36 @@ describe('FR-13 ofrecer tablas', () => {
     const alone = ok(offerDraw(r, guest.color));
     expect(alone.agreed).toBe(false);
     expect(r.game.status).toBe('playing');
+  });
+  it('AC-1311: tras unas tablas acordadas, la revancha funciona como en cualquier final', () => {
+    const { r, host, guest } = playing();
+
+    offerDraw(r, host.color);
+    ok(offerDraw(r, guest.color));
+    expect(r.game.status).toBe('draw');
+
+    // La partida esta terminada, asi que la revancha se pide igual que tras un mate.
+    expect(ok(requestRematch(r, host.color)).agreed).toBe(false);
+    expect(ok(requestRematch(r, guest.color)).agreed).toBe(true);
+    expect(r.game.status).toBe('playing');
+    expect(r.game.endReason).toBeNull();
+  });
+
+  it('AC-1311: la revancha olvida tambien las ofertas de tablas', () => {
+    const { r, host, guest } = playing();
+
+    offerDraw(r, host.color);
+    declineDraw(r, guest.color); // a host le queda una espera pendiente
+    expect(drawMovesLeft(r, host.color)).toBeGreaterThan(0);
+
+    r.game.status = 'checkmate';
+    requestRematch(r, host.color);
+    requestRematch(r, guest.color);
+
+    // Tablero nuevo: ni ofertas en pie ni esperas heredadas de la partida anterior.
+    for (const seat of Object.values(r.seats)) {
+      expect(seat?.offersDraw).toBe(false);
+      expect(seat?.drawAllowedFrom).toBeNull();
+    }
   });
 });

@@ -7,8 +7,33 @@ import { describe, expect, it } from 'vitest';
 import { drawButton } from '../src/online.js';
 
 describe('FR-13 ofrecer tablas', () => {
-  const offer = (over: Partial<Parameters<typeof drawButton>[0]> = {}) =>
-    drawButton({ mine: false, theirs: false, movesLeft: 0, ...over });
+  const state = (over: Partial<Parameters<typeof drawButton>[0]> = {}) => ({
+    mode: 'online' as const,
+    status: 'playing' as const,
+    mine: false,
+    theirs: false,
+    movesLeft: 0,
+    ...over,
+  });
+  /** Los casos en los que el boton se muestra: el resto devuelve `null`. */
+  const offer = (over: Partial<Parameters<typeof drawButton>[0]> = {}) => {
+    const button = drawButton(state(over));
+    if (button === null) throw new Error('se esperaba un boton, no null');
+    return button;
+  };
+
+  it('AC-1312: fuera de online no hay boton, porque no hay con quien acordar', () => {
+    // Contra la maquina no hay con quien acordar, y en hotseat los dos jugadores ya
+    // comparten la mesa: pueden dejarlo sin pedirle permiso a nadie.
+    expect(drawButton(state({ mode: 'bot' }))).toBeNull();
+    expect(drawButton(state({ mode: 'hotseat' }))).toBeNull();
+  });
+
+  it('AC-1303: con la partida terminada tampoco hay boton', () => {
+    // Lo que se ofrece al final es la revancha, no las tablas.
+    expect(drawButton(state({ status: 'draw' }))).toBeNull();
+    expect(drawButton(state({ status: 'checkmate' }))).toBeNull();
+  });
 
   it('AC-1302: sin nada pendiente, el boton ofrece', () => {
     expect(offer()).toEqual({ label: 'Ofrecer tablas', action: 'offer', disabled: false });

@@ -45,6 +45,8 @@ export function Hud() {
   if (view === null) return null;
 
   const draw = drawButton({
+    mode: s.mode,
+    status: view.status,
     mine: s.online.drawMine,
     theirs: s.online.drawTheirs,
     movesLeft: s.online.drawMovesLeft,
@@ -147,7 +149,7 @@ export function Hud() {
             tablero y no en el final. Es el sitio del que FR-12 quito el de revancha, porque
             aquel reiniciaba la partida del rival sin avisarle; este no hace nada sin el
             consentimiento del otro. */}
-        {s.mode === 'online' && view.status === 'playing' && (
+        {draw !== null && (
           <div className="draw-offer">
             {/* Ofrecer y aceptar mandan lo mismo: el acuerdo lo cierran los dos. */}
             <button

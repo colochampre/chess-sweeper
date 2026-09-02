@@ -233,6 +233,9 @@ el rival la conteste, siendo mover una de las respuestas posibles.
   porque permitia reiniciarle la partida al rival sin avisarle; este actua en mitad del juego
   a proposito, y solo con el consentimiento del otro.
 
+AC-1313 se comprueba a mano: donde se coloca un boton es una decision de maquetado, no
+logica que se pueda aislar. Lo que si esta cubierto es cuando aparece y cuando no (AC-1312).
+
 ### Sobre el reloj que todavia no existe
 
 En FIDE se ofrecen tablas despues de mover y antes de apretar el reloj, para que el rival la

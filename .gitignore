@@ -13,3 +13,6 @@ balance-results/
 
 # Estado local de wrangler/miniflare (almacenamiento de los Durable Objects)
 .wrangler/
+
+# Machine-specific: contains absolute skill paths from the local user profile
+.atl/

@@ -175,8 +175,13 @@ deja al rival esperando indefinidamente.
 - **AC-1102** Al confirmar, la partida termina con motivo `abandoned` y gana el rival.
 - **AC-1103** Perder la conexion NO termina la partida: el asiento queda ausente y se
   recupera con `resume` conservando la posicion.
-- **AC-1104** Una ausencia de mas de 2 minutos da la victoria al rival sin que este tenga
-  que pedir nada. Cerrar la pestana no puede salir mas barato que rendirse.
+- **AC-1104** Cada jugador dispone de 2 minutos de ausencia POR PARTIDA. Se gastan en tiempo
+  real mientras no esta, lo que sobra queda para la proxima vez, y al agotarse gana el rival
+  sin que tenga que pedir nada. Cerrar la pestana no puede salir mas barato que rendirse.
+  El presupuesto es por partida y no por desconexion. Dando 2 minutos frescos cada vez, con
+  reloj (FR-14) bastaria con desenchufarse en cada jugada dificil para pensarla gratis, ya
+  que la ausencia para el reloj (AC-1408). Y sin reloj, permitiria estirar una partida
+  indefinidamente a base de reconectar. La misma regla sirve para los dos casos.
 - **AC-1105** Abandonar antes de que el rival se siente no da la victoria a nadie: el
   asiento queda libre y la sala vuelve a admitir a alguien.
 - **AC-1106** Una partida ya terminada no se puede abandonar otra vez.
@@ -259,22 +264,92 @@ el rival la conteste, siendo mover una de las respuestas posibles.
 AC-1313 se comprueba a mano: donde se coloca un boton es una decision de maquetado, no
 logica que se pueda aislar. Lo que si esta cubierto es cuando aparece y cuando no (AC-1312).
 
-### Sobre el reloj que todavia no existe
+### Sobre el reloj
 
 En FIDE se ofrecen tablas despues de mover y antes de apretar el reloj, para que el rival la
-piense con su tiempo. Ese orden solo es observable si hay reloj, y aqui todavia no lo hay:
-las tablas se pueden construir enteras sin el.
+piense con su tiempo. Ese orden solo es observable si hay reloj, asi que FR-13 se construyo
+entero sin el y dejo tres decisiones tomadas para cuando llegara:
 
-Lo que si se decide ya, porque despues sale caro:
-
-- La oferta se apaga dentro de `playMove`, la unica puerta que modifica la partida. Es donde
-  latira el reloj tambien.
-- La oferta es un booleano por asiento; el reloj seran milisegundos por asiento. Campos
+- La oferta se apaga dentro de `playMove`, la unica puerta que modifica la partida, que es
+  donde late el reloj tambien.
+- La oferta es un booleano por asiento y el reloj son milisegundos por asiento: campos
   ortogonales, no se tocan.
-- No hay mensaje para retirar la oferta (AC-1307).
+- No hay mensaje para retirar la oferta (AC-1307), asi que retirarla nunca puede volverse una
+  palanca de tiempo.
 
-Queda abierto para entonces si la oferta viaja atomica con el movimiento
-(`{ t: 'move', move, offerDraw: true }`) para caer en el tiempo del rival. Hoy es
-indistinguible de mandar `move` y `draw` seguidos, porque el WebSocket conserva el orden de
-la conexion; y esa variante se anade luego sin romper el mensaje suelto, que hace falta igual
-para ofrecer fuera de turno.
+Lo que quedaba abierto —si la oferta viaja atomica con el movimiento para caer en el tiempo
+del rival— se decidio que si, y vive en AC-1413.
+
+## FR-14 - El reloj
+
+Un reloj de ajedrez, opcional por sala. Lo lleva el servidor, como las minas: lo que decide
+el cliente, el cliente lo puede mentir.
+
+La regla dificil de este FR no es descontar tiempo, es que hay **dos plazos que podrian
+correr a la vez** —el reloj y la ausencia de AC-1104— y aplicarlos juntos da resultados
+absurdos. Lo que sigue los hace excluyentes: con los dos jugadores presentes manda el reloj;
+con alguien ausente, el reloj se para y corre la ausencia.
+
+- **AC-1401** El control de tiempo se elige al crear la sala y viaja con el resto de los
+  parametros. "Sin reloj" es una opcion y es la de por defecto: es lo que hacen hoy todas
+  las partidas, y anadir un reloj no puede cambiarle la partida a quien no lo pidio.
+- **AC-1402** El reloj lo lleva el servidor. El cliente dibuja lo que le llega y nunca decide
+  que se acabo el tiempo. Misma razon que las minas: lo que decide el cliente, el cliente lo
+  puede mentir.
+- **AC-1403** El reloj arranca cuando se sientan los dos, no al crear la sala. Esperar a que
+  llegue un rival no puede costar tiempo.
+- **AC-1404** Al mover se descuenta lo que tardo quien movio y se le suma el incremento, si
+  lo hay. Lo mide el servidor, asi que quien mueve paga su propia latencia de subida: es lo
+  que hace cualquier reloj de verdad, y la alternativa seria fiarse de un cronometro que
+  corre en la maquina del rival.
+- **AC-1405** Quedarse sin tiempo termina la partida con motivo `timeout`, gana el rival, y
+  viaja en el mismo evento `end` que cualquier otro final.
+- **AC-1406** La bandera cae sola y en el momento. El servidor se despierta en el instante en
+  que el reloj llegaria a cero y el rival no tiene que reclamar nada, igual que en AC-1104.
+  Un barrido periodico no sirve para esto: se perderia medio minuto tarde, o se movería con
+  un tiempo que ya no se tenia.
+- **AC-1407** Si al caerse la bandera el rival no tiene material para dar mate, son tablas y
+  no victoria. Aqui el material desaparece por explosiones, asi que quedarse con el rey solo
+  y ganar por tiempo es un caso normal, no una rareza de reglamento.
+- **AC-1408** Con alguien ausente el reloj se para, el de los dos. Si estan los dos delante
+  manda el reloj; si falta uno, no corre el tiempo de nadie. Que se caiga la conexion de uno
+  no puede costarle la partida al otro.
+- **AC-1409** Esa pausa se paga con el presupuesto de ausencia de AC-1104, que es por partida
+  y no por desconexion. Es lo que hace que pausar sea seguro: regalando dos minutos en cada
+  desconexion, bastaria con desenchufarse en cada jugada dificil para pensarla gratis y
+  volver, porque el reloj parado convierte una caida de red en una ventaja. Acumulado, esa
+  trampa se puede hacer una vez por partida, y quien gasta el presupuesto asi se queda sin
+  red para una caida de verdad.
+- **AC-1410** Al reconectar el reloj se recupera tal cual estaba, sin regalar ni cobrar de
+  mas por el rato ausente.
+- **AC-1411** La revancha reinicia los relojes y tambien los presupuestos de ausencia. Es
+  una partida nueva, no la continuacion de la anterior.
+- **AC-1412** El cliente no lleva su propia cuenta: recibe lo que queda y desde cuando, y
+  dibuja. Es lo que ya hace con el plazo de ausencia (AC-1109), y es lo que evita que el
+  reloj que se ve y el que aplica el servidor se separen.
+- **AC-1413** Una oferta de tablas puede viajar con el movimiento, y entonces se aplica
+  DESPUES de aplicarlo, de modo que el rival la piensa con SU tiempo. Es la secuencia de FIDE
+  —mover, ofrecer, apretar el reloj— que hasta ahora no era observable porque no habia reloj
+  que apretar. El mensaje suelto de FR-13 sigue existiendo, porque aceptar no es un
+  movimiento y ofrecer fuera de turno tambien se permite.
+
+### Donde vive
+
+En el motor, como modulo propio (`@cm/engine/clock`): funciones puras sobre un `ClockState`
+que guarda `RoomState`. Igual que la logica de sala y la politica de origenes, lo comparten
+los dos transportes y no hay dos copias de la regla.
+
+No va dentro de `GameState`: `applyMove` es pura y hoy recibe `(state, move)`. Meterle el
+reloj la obligaria a conocer la hora, y eso cambia la funcion que usan tambien el bot, el
+panel de balance y los tests de 001-core-rules, que no tienen nada que ver con esto.
+
+El precio es que hotseat no puede tener reloj todavia. Pero como las funciones son puras y
+viven en el motor, el dia que se quiera blitz en la misma maquina el cliente reusa estas
+mismas: hay que darles un `ClockState`, no reescribir la regla.
+
+### Lo que arrastra
+
+`EndReason` y `GameStatus` suman `timeout`, como ya hizo `abandoned`. `insufficientMaterial`
+esta privada en `game.ts` y hay que exportarla para AC-1407. `RoomSettings` y `parseIntent`
+suman el control de tiempo. Y `PROTOCOL_VERSION` pasa a 4: cambia `ClientMessage` por
+AC-1413 y `ServerMessage` por AC-1412, asi que la huella de AC-504 lo va a exigir.

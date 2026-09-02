@@ -10,6 +10,7 @@ import {
   declineDraw,
   drawMovesLeft,
   forfeitAbsent,
+  forfeitTimeout,
   generateRoomCode,
   intentToQuery,
   isProtocolCurrent,
@@ -623,5 +624,86 @@ describe('FR-13 ofrecer tablas', () => {
       expect(seat?.offersDraw).toBe(false);
       expect(seat?.drawAllowedFrom).toBeNull();
     }
+  });
+});
+
+describe('FR-14 el reloj en la sala', () => {
+  const timed = (control = '5+2') =>
+    createRoom(generateRoomCode(), { ...SETTINGS, timeControl: control as never });
+
+  const ok = <T>(result: T | RoomError): T => {
+    if (isRoomError(result)) throw new Error(`resultado inesperado: ${result.error}`);
+    return result;
+  };
+
+  it('AC-1401: sin control de tiempo la sala no tiene reloj y todo sigue igual', () => {
+    const r = createRoom(generateRoomCode(), SETTINGS);
+
+    expect(r.clock).toBeNull();
+    // Y se puede jugar: el reloj es opcional, no un requisito nuevo.
+    takeSeat(r);
+    takeSeat(r);
+    expect(isRoomError(playMove(r, 'w', { from: 12, to: 28 }))).toBe(false);
+  });
+
+  it('AC-1403: el reloj arranca cuando se sientan los dos, no al crear la sala', () => {
+    const r = timed();
+    expect(r.clock?.runningSince).toBeNull();
+
+    takeSeat(r);
+    // Con uno solo sentado no corre: esperar a que llegue alguien no puede costar tiempo.
+    expect(r.clock?.runningSince).toBeNull();
+
+    takeSeat(r);
+    expect(r.clock?.runningSince).not.toBeNull();
+  });
+
+  it('AC-1404: mover descuenta del que movio y deja corriendo al rival', () => {
+    const r = timed();
+    takeSeat(r);
+    takeSeat(r);
+    r.game.mines.fill(false);
+    const started = r.clock!.runningSince!;
+
+    ok(playMove(r, 'w', { from: 12, to: 28 }, started + 10_000));
+
+    expect(r.clock!.left.w).toBe(5 * 60_000 - 10_000 + 2_000);
+    expect(r.clock!.left.b).toBe(5 * 60_000);
+  });
+
+  it('AC-1405: quedarse sin tiempo termina la partida y gana el rival', () => {
+    const r = timed();
+    takeSeat(r);
+    takeSeat(r);
+    const started = r.clock!.runningSince!;
+
+    const out = forfeitTimeout(r, started + 6 * 60_000);
+
+    expect(out).not.toBeNull();
+    expect(r.game.status).toBe('timeout');
+    expect(r.game.winner).toBe('b');
+    expect(r.game.endReason).toBe('timeout');
+    // Mismo evento `end` que cualquier otro final (AC-1107).
+    expect(out?.events).toEqual([
+      { type: 'end', status: 'timeout', winner: 'b', reason: 'timeout' },
+    ]);
+  });
+
+  it('AC-1405: con tiempo de sobra no termina nada', () => {
+    const r = timed();
+    takeSeat(r);
+    takeSeat(r);
+
+    expect(forfeitTimeout(r, r.clock!.runningSince! + 1_000)).toBeNull();
+    expect(r.game.status).toBe('playing');
+  });
+
+  it('AC-1405: una sala sin reloj nunca pierde por tiempo', () => {
+    const r = createRoom(generateRoomCode(), SETTINGS);
+    takeSeat(r);
+    takeSeat(r);
+
+    expect(forfeitTimeout(r, Date.now() + 999 * 60_000)).toBeNull();
+    expect(r.game.status).toBe('playing');
   });
 });

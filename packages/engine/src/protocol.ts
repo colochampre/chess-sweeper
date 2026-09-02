@@ -6,13 +6,14 @@
  * y solo envia `PlayerView`, de modo que ningun cliente puede leer donde estan las minas.
  */
 import type { Color, Difficulty, GameEvent, Move, PlayerView } from './types.js';
+import type { TimeControl } from './clock.js';
 
 /**
  * Version del formato del cable. Viaja en la URL de la conexion y el servidor solo acepta la
  * suya: si fuera solo un numero documentado, un cliente viejo contra un servidor nuevo no se
  * rechazaria, se rompería raro. Se sube cada vez que cambian `ClientMessage` o `ServerMessage`.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /** Parametro de la query donde viaja la version. */
 export const PROTOCOL_PARAM = 'v';
@@ -32,6 +33,8 @@ export interface RoomSettings {
   boardSize: number;
   /** Color que quiere el anfitrion; 'random' lo decide el servidor. */
   hostColor: Color | 'random';
+  /** Control de tiempo. Sin el se juega sin reloj, que es lo que hacian todas las salas. */
+  timeControl?: TimeControl;
 }
 
 /**

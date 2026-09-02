@@ -15,6 +15,7 @@ export const END_TEXT: Record<EndReason, string> = {
   'fifty-move': 'Tablas por la regla de 50 jugadas',
   abandoned: 'Partida abandonada',
   'agreed-draw': 'Tablas acordadas',
+  timeout: 'Se acabo el tiempo',
 };
 
 /**

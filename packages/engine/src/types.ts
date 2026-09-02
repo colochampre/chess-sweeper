@@ -59,7 +59,9 @@ export type EndReason =
   /** Un jugador se fue de la partida, o se ausento el tiempo suficiente. Solo en online. */
   | 'abandoned'
   /** Los dos jugadores acordaron tablas. Solo en online: hace falta con quien acordar. */
-  | 'agreed-draw';
+  | 'agreed-draw'
+  /** A un jugador se le acabo el tiempo. Solo en online: el reloj lo lleva el servidor. */
+  | 'timeout';
 
 export type GameStatus =
   | 'playing'
@@ -67,7 +69,8 @@ export type GameStatus =
   | 'stalemate'
   | 'king-destroyed'
   | 'draw'
-  | 'abandoned';
+  | 'abandoned'
+  | 'timeout';
 
 export interface CastlingRights {
   w: { k: boolean; q: boolean };

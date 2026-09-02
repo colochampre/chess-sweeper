@@ -14,6 +14,13 @@ import { configFor } from './config.js';
 import { randomSeed } from './rng.js';
 import type { RoomSettings } from './protocol.js';
 import type { Color, GameEvent, GameState, Move, PlayerView } from './types.js';
+import {
+  chargeMove,
+  createClock,
+  flaggedColor,
+  startClock,
+  type ClockState,
+} from './clock.js';
 
 export interface Seat {
   color: Color;
@@ -53,6 +60,8 @@ export interface RoomState {
   /** VERDAD OCULTA: contiene el campo de minas. */
   game: GameState;
   seats: Partial<Record<Color, Seat>>;
+  /** Reloj de la partida, o `null` si la sala se creo sin control de tiempo. */
+  clock: ClockState | null;
   createdAt: number;
   lastActivity: number;
 }
@@ -98,6 +107,7 @@ export function createRoom(code: string, settings: RoomSettings, now = Date.now(
     settings,
     game: newGame(settings),
     seats: {},
+    clock: createClock(settings.timeControl ?? 'none'),
     createdAt: now,
     lastActivity: now,
   };
@@ -133,8 +143,21 @@ export function takeSeat(
     drawAllowedFrom: null,
   };
   room.seats[color] = seat;
+  // El reloj arranca cuando estan los dos, no al crear la sala: esperar a que llegue un
+  // rival no puede costar tiempo (AC-1403).
+  if (room.clock !== null && room.seats.w && room.seats.b) startClock(room.clock, now);
   room.lastActivity = now;
   return seat;
+}
+
+/**
+ * De quien es el reloj ahora mismo, o `null` si no corre. Lo decide la sala porque es la
+ * unica que sabe de quien es el turno y si estan los dos delante; el modulo del reloj solo
+ * cuenta. Sin esto, cada transporte tendria su propia idea de cuando corre el tiempo.
+ */
+export function clockRunningFor(room: RoomState): Color | null {
+  if (room.clock === null || room.game.status !== 'playing') return null;
+  return room.game.turn;
 }
 
 /** Recupera un asiento con su credencial tras una desconexion. */
@@ -166,6 +189,10 @@ export function playMove(
   try {
     const result = applyMove(room.game, move);
     room.game = result.state;
+    // Se cobra la jugada a quien la hizo y el reloj sigue, ya para el rival (AC-1404). Va
+    // aqui, dentro de la unica puerta que modifica la partida, para que no exista un camino
+    // por el que se pueda mover sin pagar el tiempo.
+    if (room.clock !== null) chargeMove(room.clock, color, now);
     // Mover es contestar que no (AC-1306, regla FIDE): la oferta que tenia el rival en pie
     // se apaga aqui. La propia sobrevive al movimiento, porque en FIDE se ofrecen tablas
     // justo despues de mover.
@@ -386,6 +413,30 @@ export function forfeitAbsent(
     }
   }
   return null;
+}
+
+/**
+ * Da por perdida la partida de quien se quedo sin tiempo. La llaman los dos transportes
+ * desde su propio reloj, de modo que la bandera cae sola y el rival no reclama nada
+ * (AC-1405/1406), igual que `forfeitAbsent` con la ausencia.
+ */
+export function forfeitTimeout(
+  room: RoomState,
+  now = Date.now(),
+): { events: GameEvent[] } | null {
+  if (room.clock === null || room.game.status !== 'playing') return null;
+  const flagged = flaggedColor(room.clock, clockRunningFor(room), now);
+  if (flagged === null) return null;
+
+  const winner = opponentOf(flagged);
+  room.clock.left[flagged] = 0;
+  room.clock.runningSince = null;
+  room.game.status = 'timeout';
+  room.game.winner = winner;
+  room.game.endReason = 'timeout';
+  room.lastActivity = now;
+  // Mismo evento `end` que cualquier otro final (AC-1107).
+  return { events: [{ type: 'end', status: 'timeout', winner, reason: 'timeout' }] };
 }
 
 /**

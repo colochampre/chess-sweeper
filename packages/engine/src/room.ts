@@ -18,6 +18,7 @@ import {
   chargeMove,
   createClock,
   flaggedColor,
+  pauseClock,
   startClock,
   type ClockState,
 } from './clock.js';
@@ -39,6 +40,13 @@ export interface Seat {
    * distinguir una caida pasajera de un abandono: ver `forfeitAbsent`.
    */
   disconnectedAt: number | null;
+  /**
+   * Ausencia ya gastada en esta partida, sumando todas las veces. El presupuesto es por
+   * partida y no por desconexion (AC-1104): como la ausencia para el reloj (AC-1408),
+   * regalarlo entero cada vez convertiria desenchufarse en dos minutos de analisis gratis
+   * por jugada.
+   */
+  absenceSpentMs: number;
   /** Ha pedido la revancha. Se olvida al empezarla y al ausentarse. */
   wantsRematch: boolean;
   /**
@@ -138,14 +146,16 @@ export function takeSeat(
     connected: true,
     session: newToken(),
     disconnectedAt: null,
+    absenceSpentMs: 0,
     wantsRematch: false,
     offersDraw: false,
     drawAllowedFrom: null,
   };
   room.seats[color] = seat;
   // El reloj arranca cuando estan los dos, no al crear la sala: esperar a que llegue un
-  // rival no puede costar tiempo (AC-1403).
-  if (room.clock !== null && room.seats.w && room.seats.b) startClock(room.clock, now);
+  // rival no puede costar tiempo (AC-1403). "Los dos" es presentes, no sentados: un asiento
+  // ocupado por alguien ausente no deja correr el reloj (AC-1408).
+  if (room.clock !== null && bothPresent(room)) startClock(room.clock, now);
   room.lastActivity = now;
   return seat;
 }
@@ -166,13 +176,24 @@ export function resumeSeat(room: RoomState, token: string, now = Date.now()): Se
     if (seat && seat.token === token) {
       seat.connected = true;
       seat.session = newToken(); // conexion nueva: la anterior deja de mandar
-      seat.disconnectedAt = null; // ha vuelto: el plazo de abandono deja de correr
+      // El rato que estuvo fuera se apunta antes de olvidarlo: el presupuesto es por
+      // partida, asi que volver no lo devuelve, solo detiene el gasto.
+      if (seat.disconnectedAt !== null) seat.absenceSpentMs += now - seat.disconnectedAt;
+      seat.disconnectedAt = null;
+      // Vuelven a estar los dos: el reloj sigue donde se quedo (AC-1408).
+      if (room.clock !== null && room.game.status === 'playing' && bothPresent(room)) {
+        startClock(room.clock, now);
+      }
       room.lastActivity = now;
       return seat;
     }
   }
   return { error: 'Ese asiento no es tuyo' };
 }
+
+/** Los dos asientos ocupados y conectados: es cuando puede correr el reloj. */
+const bothPresent = (room: RoomState): boolean =>
+  (['w', 'b'] as const).every((c) => room.seats[c]?.connected === true);
 
 /**
  * Unica puerta de entrada para modificar la partida. Valida con el mismo `applyMove` del
@@ -218,8 +239,13 @@ export function rematch(room: RoomState, now = Date.now()): void {
     seat.wantsRematch = false; // la siguiente revancha hay que volver a acordarla
     seat.offersDraw = false; // partida nueva, tablero nuevo: la oferta anterior no significa nada
     seat.drawAllowedFrom = null;
+    seat.absenceSpentMs = 0; // partida nueva, presupuesto nuevo (AC-1411)
     room.seats[seat.color] = seat;
   }
+  // Relojes a cero y en marcha si estan los dos: es una partida nueva, no la continuacion
+  // de la anterior.
+  room.clock = createClock(room.settings.timeControl ?? 'none');
+  if (room.clock !== null && bothPresent(room)) startClock(room.clock, now);
   room.lastActivity = now;
 }
 
@@ -355,6 +381,9 @@ export function markDisconnected(
 ): boolean {
   const seat = room.seats[color];
   if (!seat || seat.session !== session) return false;
+  // El reloj se para antes de tocar el asiento, para cobrarle a quien corria lo que llevaba
+  // consumido hasta este instante y no un milisegundo mas (AC-1408).
+  if (room.clock !== null) pauseClock(room.clock, clockRunningFor(room), now);
   seat.connected = false;
   seat.disconnectedAt = now;
   // Una revancha no puede arrancar con alguien que ya no esta delante.
@@ -457,7 +486,10 @@ export function absenceMsLeft(
   if (!seat || seat.connected || seat.disconnectedAt === null) return null;
   // Sin rival sentado no hay a quien dar la victoria: de esa sala se ocupa `isStale`.
   if (!room.seats[opponentOf(color)]) return null;
-  return Math.max(0, seat.disconnectedAt + ABSENCE_FORFEIT_MS - now);
+  // Lo gastado en ausencias anteriores cuenta: el presupuesto es de la partida, no de esta
+  // desconexion. Ver AC-1104.
+  const spent = seat.absenceSpentMs + (now - seat.disconnectedAt);
+  return Math.max(0, ABSENCE_FORFEIT_MS - spent);
 }
 
 export const opponentOf = (color: Color): Color => (color === 'w' ? 'b' : 'w');

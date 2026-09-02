@@ -6,6 +6,8 @@ import {
   PROTOCOL_VERSION,
   ROOM_TTL_MS,
   DRAW_COOLDOWN_MOVES,
+  clockMsLeft,
+  clockRunningFor,
   createRoom,
   declineDraw,
   drawMovesLeft,
@@ -705,5 +707,104 @@ describe('FR-14 el reloj en la sala', () => {
 
     expect(forfeitTimeout(r, Date.now() + 999 * 60_000)).toBeNull();
     expect(r.game.status).toBe('playing');
+  });
+});
+
+describe('FR-14 la ausencia para el reloj', () => {
+  const timed = () => {
+    const r = createRoom(generateRoomCode(), { ...SETTINGS, timeControl: '5+2' as never });
+    const host = seatOf(takeSeat(r));
+    const guest = seatOf(takeSeat(r));
+    return { r, host, guest, t0: r.clock!.runningSince! };
+  };
+
+  it('AC-1408: al ausentarse alguien el reloj se para, y no corre el tiempo de nadie', () => {
+    const { r, host, t0 } = timed();
+
+    markDisconnected(r, host.color, host.session, t0 + 10_000);
+
+    expect(r.clock!.runningSince).toBeNull();
+    // Da igual cuanto pase: que se caiga la conexion de uno no puede costarle la partida
+    // al otro, ni gastarle el reloj al que se cayo.
+    expect(clockMsLeft(r.clock!, 'w', clockRunningFor(r), t0 + 999_000)).toBe(
+      5 * 60_000 - 10_000,
+    );
+    expect(clockMsLeft(r.clock!, 'b', clockRunningFor(r), t0 + 999_000)).toBe(5 * 60_000);
+  });
+
+  it('AC-1408: sentarse frente a alguien ausente no arranca el reloj', () => {
+    const r = createRoom(generateRoomCode(), { ...SETTINGS, timeControl: '5+2' as never });
+    const host = seatOf(takeSeat(r));
+    markDisconnected(r, host.color, host.session);
+
+    // El asiento sigue ocupado, asi que el segundo jugador entra en el otro color. Pero
+    // enfrente no hay nadie: el reloj no puede empezar a correrle a un ausente.
+    takeSeat(r);
+
+    expect(r.clock!.runningSince).toBeNull();
+  });
+
+  it('AC-1408: lo consumido antes de la caida se cobra, parar no es deshacer', () => {
+    const { r, host, t0 } = timed();
+
+    markDisconnected(r, host.color, host.session, t0 + 30_000);
+
+    expect(r.clock!.left.w).toBe(5 * 60_000 - 30_000);
+  });
+
+  it('AC-1408: al volver, el reloj se reanuda', () => {
+    const { r, host, t0 } = timed();
+    markDisconnected(r, host.color, host.session, t0 + 10_000);
+
+    resumeSeat(r, host.token, t0 + 40_000);
+
+    expect(r.clock!.runningSince).toBe(t0 + 40_000);
+    // Y no se le cobra el rato que estuvo fuera.
+    expect(clockMsLeft(r.clock!, 'w', clockRunningFor(r), t0 + 40_000)).toBe(5 * 60_000 - 10_000);
+  });
+
+  it('AC-1409: el presupuesto de ausencia es por partida y se acumula', () => {
+    const { r, host, t0 } = timed();
+
+    // Primera ausencia: un minuto.
+    markDisconnected(r, host.color, host.session, t0);
+    resumeSeat(r, host.token, t0 + 60_000);
+
+    // La segunda no empieza de cero: quedan los otros 60 segundos, no 2 minutos.
+    const seat = r.seats[host.color]!;
+    markDisconnected(r, host.color, seat.session, t0 + 70_000);
+    expect(absenceMsLeft(r, host.color, t0 + 70_000)).toBe(ABSENCE_FORFEIT_MS - 60_000);
+  });
+
+  it('AC-1409: agotado el presupuesto entre varias ausencias, gana el rival', () => {
+    const { r, host, guest, t0 } = timed();
+
+    markDisconnected(r, host.color, host.session, t0);
+    resumeSeat(r, host.token, t0 + 60_000);
+    const seat = r.seats[host.color]!;
+    markDisconnected(r, host.color, seat.session, t0 + 70_000);
+
+    // Sin acumular, desenchufarse en cada jugada dificil daria dos minutos gratis cada vez.
+    const out = forfeitAbsent(r, t0 + 70_000 + 60_001);
+    expect(out).not.toBeNull();
+    expect(r.game.winner).toBe(guest.color);
+    expect(r.game.endReason).toBe('abandoned');
+  });
+
+  it('AC-1411: la revancha reinicia los relojes y los presupuestos', () => {
+    const { r, host, t0 } = timed();
+    markDisconnected(r, host.color, host.session, t0);
+    resumeSeat(r, host.token, t0 + 60_000);
+    r.game.status = 'checkmate';
+
+    rematch(r, t0 + 70_000);
+
+    expect(r.clock!.left).toEqual({ w: 5 * 60_000, b: 5 * 60_000 });
+    expect(r.clock!.runningSince).toBe(t0 + 70_000);
+    // Es una partida nueva, no la continuacion de la anterior.
+    for (const seat of Object.values(r.seats)) {
+      expect(absenceMsLeft(r, seat!.color, t0 + 70_000)).toBeNull();
+      expect(seat!.absenceSpentMs).toBe(0);
+    }
   });
 });

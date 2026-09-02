@@ -13,10 +13,11 @@ import { MINE_SRC, pieceSrc } from '../theme.js';
 import { useGame, type Mode } from '../store.js';
 import { loadSeat } from '../online.js';
 
+/** El orden es el de la lista: el primero es el que se ofrece por defecto. */
 const MODES: { value: Mode; label: string; hint: string }[] = [
-  { value: 'hotseat', label: 'Dos jugadores', hint: 'Mismo dispositivo, el tablero gira en cada turno' },
-  { value: 'bot', label: 'Contra la maquina', hint: 'Elige la fuerza del rival' },
   { value: 'online', label: 'Online', hint: 'Crea una sala o entra con un codigo' },
+  { value: 'bot', label: 'Contra la maquina', hint: 'Elige la fuerza del rival' },
+  { value: 'hotseat', label: 'Dos jugadores', hint: 'Mismo dispositivo, el tablero gira en cada turno' },
 ];
 
 const DIFFICULTIES: { value: Difficulty; label: string }[] = [
@@ -27,10 +28,12 @@ const DIFFICULTIES: { value: Difficulty; label: string }[] = [
 
 export function Menu() {
   const { startLocal, hostOnline, joinOnline, resumeOnline, error } = useGame();
-  const [mode, setMode] = useState<Mode>('hotseat');
+  const [mode, setMode] = useState<Mode>(MODES[0].value);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [botLevel, setBotLevel] = useState<Difficulty>('normal');
-  const [color, setColor] = useState<Color | 'random'>('w');
+  // Al azar por defecto: en online el color se negocia con el rival, y elegir blancas de
+  // entrada da la primera jugada a quien monta la sala sin que nadie lo haya acordado.
+  const [color, setColor] = useState<Color | 'random'>('random');
   const [boardSize, setBoardSize] = useState(8);
   const [joinCode, setJoinCode] = useState('');
 

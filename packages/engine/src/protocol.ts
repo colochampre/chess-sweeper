@@ -6,7 +6,7 @@
  * y solo envia `PlayerView`, de modo que ningun cliente puede leer donde estan las minas.
  */
 import type { Color, Difficulty, GameEvent, Move, PlayerView } from './types.js';
-import type { TimeControl } from './clock.js';
+import { isTimeControl, type TimeControl } from './clock.js';
 
 /**
  * Version del formato del cable. Viaja en la URL de la conexion y el servidor solo acepta la
@@ -73,6 +73,13 @@ export type ServerMessage =
    * la espera que ve el jugador y la que aplica el servidor no puedan discrepar.
    */
   | { t: 'draw'; mine: boolean; theirs: boolean; movesLeft: number }
+  /**
+   * Estado del reloj: lo que le queda a cada uno EN EL INSTANTE DE MANDARLO, y de quien
+   * corre (`null` si esta parado). El cliente apunta cuando lo recibio y descuenta desde
+   * ahi (AC-1412); no viaja una marca de tiempo del servidor porque los relojes de las dos
+   * maquinas no tienen por que coincidir.
+   */
+  | { t: 'clock'; left: Record<Color, number>; running: Color | null }
   | { t: 'error'; message: string };
 
 /**
@@ -122,7 +129,10 @@ export function parseIntent(params: URLSearchParams): ConnectIntent | null {
     if (difficulty !== 'easy' && difficulty !== 'normal' && difficulty !== 'hard') return null;
     if (hostColor !== 'w' && hostColor !== 'b' && hostColor !== 'random') return null;
     if (!Number.isInteger(boardSize) || boardSize < 4 || boardSize > 16) return null;
-    return { a: 'create', difficulty, boardSize, hostColor };
+    // Sin control de tiempo se juega sin reloj, que es lo que hacian todas las salas.
+    const timeControl = params.get('timeControl') ?? 'none';
+    if (!isTimeControl(timeControl)) return null;
+    return { a: 'create', difficulty, boardSize, hostColor, timeControl };
   }
 
   const code = normalizeRoomCode(params.get('code') ?? '');

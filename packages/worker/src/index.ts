@@ -34,8 +34,12 @@ import {
   opponentOf,
   parseIntent,
   playMove,
+  clockMsLeft,
+  clockRunningFor,
   declineDraw,
   drawMovesLeft,
+  flagFallsAt,
+  forfeitTimeout,
   offerDraw,
   requestRematch,
   resumeSeat,
@@ -190,8 +194,16 @@ export class Room implements DurableObject {
           absences.push(seat.disconnectedAt);
         }
       }
+      // La bandera cae sola y en el momento (AC-1406): si toca antes que una ausencia, la
+      // alarma es esa. Un Durable Object solo puede tener una, asi que manda la mas urgente.
+      const flag = this.room.clock === null
+        ? null
+        : flagFallsAt(this.room.clock, clockRunningFor(this.room));
+      const deadlines: number[] = [];
+      if (absences.length > 0) deadlines.push(Math.min(...absences) + ABSENCE_FORFEIT_MS);
+      if (flag !== null) deadlines.push(flag);
       // Un segundo de margen: al despertar el plazo tiene que estar cumplido, no justo.
-      if (absences.length > 0) return Math.min(...absences) + ABSENCE_FORFEIT_MS + 1_000;
+      if (deadlines.length > 0) return Math.min(...deadlines) + 1_000;
     }
     return now + ROOM_TTL_MS + 60_000;
   }
@@ -254,6 +266,21 @@ export class Room implements DurableObject {
         movesLeft: drawMovesLeft(this.room, color),
       });
     }
+  }
+
+  /**
+   * El reloj de la sala. Se manda lo que le queda a cada uno en ESTE instante; el cliente
+   * apunta cuando lo recibio y descuenta desde ahi (AC-1412).
+   */
+  private broadcastClock(): void {
+    if (this.room === null || this.room.clock === null) return;
+    const running = clockRunningFor(this.room);
+    const at = Date.now();
+    const left = {
+      w: clockMsLeft(this.room.clock, 'w', running, at),
+      b: clockMsLeft(this.room.clock, 'b', running, at),
+    };
+    for (const color of ['w', 'b'] as const) this.send(color, { t: 'clock', left, running });
   }
 
   private broadcastPresence(): void {
@@ -322,6 +349,7 @@ export class Room implements DurableObject {
       }),
     );
     this.broadcastPresence();
+    this.broadcastClock();
     await this.save();
 
     return new Response(null, { status: 101, webSocket: client });
@@ -370,6 +398,7 @@ export class Room implements DurableObject {
         // que el acuerdo cambia en CADA movimiento. Sin avisarlo, los botones se quedan
         // puestos y pulsar "aceptar" despues de mover vuelve a ofrecer tablas.
         this.broadcastDrawState();
+        this.broadcastClock();
         await this.save();
         return;
       }
@@ -428,6 +457,8 @@ export class Room implements DurableObject {
             }),
           );
         }
+        // Partida nueva: relojes a cero y en marcha (AC-1411).
+        this.broadcastClock();
         await this.save();
         return;
       }
@@ -454,6 +485,9 @@ export class Room implements DurableObject {
     this.recent.delete(attachment.session);
     if (!markDisconnected(this.room, attachment.color, attachment.session)) return;
     this.broadcastPresence();
+    // La ausencia para el reloj (AC-1408). `save` reprograma la alarma, que con el reloj
+    // parado ya no tiene bandera que cobrar.
+    this.broadcastClock();
     await this.save();
   }
 
@@ -467,6 +501,11 @@ export class Room implements DurableObject {
    */
   async alarm(): Promise<void> {
     if (this.room !== null) {
+      const out = forfeitTimeout(this.room);
+      if (out !== null) {
+        this.broadcastEvents(out.events);
+        this.broadcastClock();
+      }
       const abandoned = forfeitAbsent(this.room);
       if (abandoned) {
         this.broadcastEvents(abandoned.events);

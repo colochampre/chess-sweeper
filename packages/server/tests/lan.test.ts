@@ -486,3 +486,76 @@ describe('FR-9 la version del protocolo se comprueba', () => {
     current.bye();
   });
 });
+
+describe('FR-14 el reloj por el cable', () => {
+  const TIMED = `${CREATE}&timeControl=5%2B2`;
+
+  it('AC-1412: al sentarse los dos, el reloj llega a ambos', async () => {
+    const host = connect(TIMED);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+
+    const guest = connect(`a=join&code=${seated.code}&timeControl=5%2B2`);
+    await guest.waitFor('seated');
+
+    // El primer `clock` del anfitrion llega con el reloj parado, porque todavia esta solo
+    // (AC-1403). El que interesa es el de cuando ya estan los dos.
+    for (const client of [host, guest]) {
+      const clock = await client.waitFor('clock', (m) => m.t === 'clock' && m.running === 'w');
+      expect(clock).toMatchObject({ t: 'clock', left: { w: 300_000, b: 300_000 } });
+    }
+
+    host.bye();
+    guest.bye();
+  });
+
+  it('AC-1404: tras mover, el reloj que llega ya trae el descuento y el incremento', async () => {
+    const host = connect(TIMED);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('clock');
+
+    host.send({ t: 'move', move: { from: 1, to: 16 } });
+
+    // Movio casi al instante, asi que el incremento le deja por encima de los 5 minutos.
+    const after = await guest.waitFor('clock', (m) => m.t === 'clock' && m.running === 'b');
+    expect(after.t === 'clock' && after.left.w).toBeGreaterThan(300_000);
+    // El del rival ya esta corriendo, asi que va por debajo del inicial, no clavado en el.
+    expect(after.t === 'clock' && after.left.b).toBeLessThanOrEqual(300_000);
+    expect(after.t === 'clock' && after.left.b).toBeGreaterThan(299_000);
+
+    host.bye();
+    guest.bye();
+  });
+
+  it('AC-1408: al irse el rival, el reloj deja de correr para los dos', async () => {
+    const host = connect(TIMED);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('clock');
+
+    guest.bye();
+
+    const paused = await host.waitFor('clock', (m) => m.t === 'clock' && m.running === null);
+    expect(paused.t === 'clock' && paused.running).toBeNull();
+
+    host.bye();
+  });
+
+  it('AC-1401: una sala sin control de tiempo no manda reloj', async () => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+
+    expect(await notReceived(host, 'clock')).toBe(true);
+
+    host.bye();
+    guest.bye();
+  });
+});

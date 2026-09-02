@@ -30,6 +30,7 @@ import {
   takeSeat,
   viewFor,
   type RoomError,
+  type RoomState,
   type RoomSettings,
   type Seat,
 } from '@cm/engine';
@@ -173,7 +174,7 @@ describe('FR-3 reconexion', () => {
 describe('FR-5 parametros de conexion', () => {
   it('AC-501: ida y vuelta de los tres tipos de intencion', () => {
     const intents = [
-      { a: 'create', difficulty: 'hard', boardSize: 10, hostColor: 'random' },
+      { a: 'create', difficulty: 'hard', boardSize: 10, hostColor: 'random', timeControl: '10+5' },
       { a: 'join', code: 'ABC234' },
       { a: 'resume', code: 'ABC234', token: '2f1c9a7e-3b4d-4c5e-8f90-1a2b3c4d5e6f' },
     ] as const;
@@ -689,6 +690,46 @@ describe('FR-14 el reloj en la sala', () => {
     expect(out?.events).toEqual([
       { type: 'end', status: 'timeout', winner: 'b', reason: 'timeout' },
     ]);
+  });
+
+  it('AC-1407: si al que le queda tiempo no le da el material, son tablas', () => {
+    const r = timed();
+    takeSeat(r);
+    takeSeat(r);
+    const started = r.clock!.runningSince!;
+    // A las negras les queda el rey solo: con eso no se da mate ni con todo el tiempo del
+    // mundo. Aqui no es una rareza de reglamento, el material lo borran las explosiones.
+    r.game.board = r.game.board.map((p) => (p === null || p.type === 'k' ? p : null));
+
+    const out = forfeitTimeout(r, started + 6 * 60_000);
+
+    expect(r.game.status).toBe('draw');
+    expect(r.game.winner).toBeNull();
+    expect(r.game.endReason).toBe('insufficient-material');
+    expect(out?.events).toEqual([
+      { type: 'end', status: 'draw', winner: null, reason: 'insufficient-material' },
+    ]);
+  });
+
+  it('AC-1407: un alfil suelto tampoco alcanza, dos piezas menores si', () => {
+    const bare = (r: RoomState, keep: number[]) => {
+      r.game.board = r.game.board.map((p, sq) =>
+        p === null || p.type === 'k' || keep.includes(sq) ? p : null,
+      );
+    };
+    const loneBishop = timed();
+    takeSeat(loneBishop);
+    takeSeat(loneBishop);
+    bare(loneBishop, [58]); // un alfil negro
+    forfeitTimeout(loneBishop, loneBishop.clock!.runningSince! + 6 * 60_000);
+    expect(loneBishop.game.winner).toBeNull();
+
+    const twoMinors = timed();
+    takeSeat(twoMinors);
+    takeSeat(twoMinors);
+    bare(twoMinors, [57, 58]); // caballo y alfil negros
+    forfeitTimeout(twoMinors, twoMinors.clock!.runningSince! + 6 * 60_000);
+    expect(twoMinors.game.winner).toBe('b');
   });
 
   it('AC-1405: con tiempo de sobra no termina nada', () => {

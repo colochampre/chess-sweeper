@@ -9,7 +9,7 @@
  * Aqui es donde viven las minas. Nada de lo que sale de este modulo hacia un cliente las
  * incluye: para eso esta `viewFor`.
  */
-import { applyMove, createGame, toView } from './game.js';
+import { applyMove, canDeliverMate, createGame, toView } from './game.js';
 import { configFor } from './config.js';
 import { randomSeed } from './rng.js';
 import type { RoomSettings } from './protocol.js';
@@ -167,6 +167,10 @@ export function takeSeat(
  */
 export function clockRunningFor(room: RoomState): Color | null {
   if (room.clock === null || room.game.status !== 'playing') return null;
+  // Parado no corre nadie. Devolver el turno igual seria inofensivo para el motor, porque
+  // `runningSince` en null no consume, pero al cliente le diria que descuente de un reloj
+  // que el servidor tiene detenido: justo la deriva que AC-1412 evita.
+  if (room.clock.runningSince === null) return null;
   return room.game.turn;
 }
 
@@ -457,15 +461,23 @@ export function forfeitTimeout(
   const flagged = flaggedColor(room.clock, clockRunningFor(room), now);
   if (flagged === null) return null;
 
-  const winner = opponentOf(flagged);
+  const rival = opponentOf(flagged);
   room.clock.left[flagged] = 0;
   room.clock.runningSince = null;
-  room.game.status = 'timeout';
+  // Ganar por tiempo exige poder ganar tambien sobre el tablero. Con el rey solo no se da
+  // mate ni con todo el tiempo del mundo, asi que son tablas (AC-1407). Aqui el caso no es
+  // una rareza de reglamento: el material lo borran las explosiones.
+  const winner = canDeliverMate(room.game, rival) ? rival : null;
+  room.game.status = winner === null ? 'draw' : 'timeout';
   room.game.winner = winner;
-  room.game.endReason = 'timeout';
+  room.game.endReason = winner === null ? 'insufficient-material' : 'timeout';
   room.lastActivity = now;
   // Mismo evento `end` que cualquier otro final (AC-1107).
-  return { events: [{ type: 'end', status: 'timeout', winner, reason: 'timeout' }] };
+  return {
+    events: [
+      { type: 'end', status: room.game.status, winner, reason: room.game.endReason },
+    ],
+  };
 }
 
 /**

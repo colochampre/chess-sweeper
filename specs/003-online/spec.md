@@ -134,7 +134,7 @@ Un `socket.destroy()` a secas no deja al cliente ni un motivo: se queda en "Cone
   entrada, la segunda reclamaria el asiento de la primera y las dos jugarian con el mismo
   color. Tener token para una sala no significa que el sitio libre sea el nuestro.
   Si la credencial tampoco vale, se descarta y se muestra el rechazo.
-- **AC-1003** El codigo de sala se valida y se normaliza al escribirlo, no al enviarlo: lo
+- **AC-1006** El codigo de sala se valida y se normaliza al escribirlo, no al enviarlo: lo
   que se ve en la caja es lo que se manda.
 
 AC-1001 a AC-1003 se comprueban a mano con las dos pestanas; viven en la capa de WebSocket

@@ -1,0 +1,84 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Tech stack: TypeScript 5.7 (strict), npm workspaces monorepo (packages/*, tools/*).
+  Packages: engine (pure TS, no deps, source of truth), ai (bot, depends on engine),
+  client (React 18.3 + Vite 5 + Zustand 5, no Tailwind), server (Node + ws 8, LAN and dev),
+  worker (Cloudflare Workers, production; one room per Durable Object).
+  Testing: Vitest 2.1, root-level config, tests live in packages/*/tests/*.test.ts.
+  Architecture: engine is framework-free and headless; applyMove returns state + GameEvent[];
+  client and both transports only replay events, never own rules. PlayerView strips
+  `mines`/`flags` from GameState so no consumer can cheat.
+  Two transports, one rulebook: room logic and the Origin policy live in the engine and are
+  shared. Anything a transport keeps its own copy of will drift — that already happened once
+  with the Origin check.
+  Existing spec method: specs/{NNN-domain}/spec.md with numbered FR-x requirements and
+  AC-xxx acceptance criteria; every test cites its AC id in the test name (see specs/README.md).
+  Commit style: Conventional Commits with Spanish subject lines (e.g. "feat(client): ...").
+
+strict_tdd: true
+# Rationale: specs/README.md explicitly documents red-green workflow ("Escribe los tests
+# citando los AC, y velos fallar. Implementa hasta que pasen.") — an existing project-level
+# TDD marker, not a default fallback.
+
+testing:
+  test_command: "npm test"              # -> vitest run (root), watch mode: npm run test:watch
+  framework: vitest@2.1.8
+  environment: node
+  test_glob: "packages/*/tests/**/*.test.ts"
+  typecheck_command: "npm run typecheck" # tsc --noEmit per package (engine, ai, client, server, worker, tools/balance)
+  worker_dev_command: "npm run dev:worker" # wrangler dev, runs locally via Miniflare, no Cloudflare login needed
+  worker_dev_note: "Must run with cwd packages/worker; needs `npm run build` once for ../client/dist" 
+  build_command: "npm run build"
+  coverage_command: ""                  # no coverage tooling configured (no @vitest/coverage-*)
+  coverage_threshold: 0
+  linter_command: ""                    # no ESLint config detected in the repo
+  formatter_command: ""                 # no Prettier config detected in the repo
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Identify which package(s) are affected (engine/ai/client/server/tools) and respect the
+      one-way dependency rule: engine has zero deps; client/server/ai only consume engine's
+      PlayerView-shaped output, never raw GameState with mines.
+  specs:
+    - This project already has an established hand-written spec convention at repo-root
+      specs/{NNN-domain}/spec.md using numbered FR-x requirements and AC-xxx acceptance
+      criteria, referenced from README.md and specs/README.md. Existing specs/ content is
+      the current source of truth for engine/ai/online domains; do not overwrite it.
+    - New SDD-pipeline delta specs live under openspec/changes/{change-name}/specs/{domain}/
+      spec.md per the OpenSpec convention. Where an SDD change extends an existing numbered
+      spec (e.g. 001-core-rules), prefer the project's own FR-x/AC-xxx numbering style over
+      generic Given/When/Then, and write in Spanish to match the existing specs/*.md language.
+      For a domain with no prior spec.md, default to English with RFC 2119 keywords
+      (MUST/SHALL/SHOULD/MAY) and Given/When/Then scenarios.
+  design:
+    - Include sequence diagrams for complex flows (event ordering, animation replay, network sync)
+    - Document architecture decisions with rationale, especially anything touching the
+      engine/client boundary or the hidden-information (mines) guarantee
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+    - Respect the review budget agreed for the session and forecast chained PRs above it.
+      The budget is a per-session choice collected at preflight; it is deliberately not
+      pinned here so this file stays valid on every machine.
+  apply:
+    guidelines:
+      - Follow existing code patterns (engine stays framework-free; client only replays events)
+      - Every test name must cite the AC id it covers, matching the existing convention
+      - Anything touching online play needs a test at the transport level too
+        (packages/server/tests/lan.test.ts starts a real server and talks WebSocket).
+        Logic tests alone have twice let a broken online build pass green.
+      - Client logic that can be made pure belongs in a pure function with a test in
+        packages/client/tests: the client has no DOM test setup.
+    tdd: true
+    test_command: "npm test"
+  verify:
+    test_command: "npm test"
+    build_command: "npm run build"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
+    - When archiving a change that extends an existing specs/{NNN-domain}/spec.md, also
+      update that root-level spec file to keep specs/README.md's status table accurate

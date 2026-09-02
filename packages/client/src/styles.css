@@ -56,6 +56,14 @@ button.primary:hover {
 button.ghost {
   background: transparent;
 }
+button.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+button.danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
 
 /* ---------- Menu ---------- */
 
@@ -581,6 +589,14 @@ button.ghost {
 }
 .online-bar .status.off {
   color: #d9a441;
+}
+/* Va dentro del panel de acciones, con el resto de opciones del tablero. */
+.draw-offer {
+  display: flex;
+  gap: 0.4rem;
+}
+.draw-offer button {
+  flex: 1;
 }
 .online-actions {
   display: flex;

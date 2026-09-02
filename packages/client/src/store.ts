@@ -25,7 +25,13 @@ import {
 } from '@cm/engine';
 import { playEvents, type AnimApi } from './anim/eventPlayer.js';
 import { OnlineClient, clearSeat, loadSeat, planConnect, saveSeat } from './online.js';
-import { playOutcome, setSoundEnabled, soundEnabled } from './sfx.js';
+import {
+  playDrawDecline,
+  playDrawOffer,
+  playOutcome,
+  setSoundEnabled,
+  soundEnabled,
+} from './sfx.js';
 import { ANIM } from './theme.js';
 
 export type Mode = 'hotseat' | 'bot' | 'online';
@@ -63,6 +69,12 @@ export interface OnlineInfo {
   rematchMine: boolean;
   /** El rival la pidio y falta que la pidas vos. */
   rematchTheirs: boolean;
+  /** Has ofrecido tablas y falta que el rival conteste. */
+  drawMine: boolean;
+  /** El rival ofrecio tablas y falta que contestes vos. */
+  drawTheirs: boolean;
+  /** Jugadas que faltan para poder volver a ofrecer tablas. Las cuenta el servidor. */
+  drawMovesLeft: number;
 }
 
 interface AppState {
@@ -110,6 +122,8 @@ interface AppState {
   joinOnline: (code: string) => void;
   resumeOnline: () => boolean;
   rematchOnline: () => void;
+  offerDrawOnline: () => void;
+  declineDrawOnline: () => void;
   askLeave: () => void;
   cancelLeave: () => void;
   backToMenu: () => void;
@@ -254,6 +268,9 @@ export const useGame = create<AppState>((set, get) => {
             waiting: true,
             rematchMine: false,
             rematchTheirs: false,
+            drawMine: false,
+            drawTheirs: false,
+            drawMovesLeft: 0,
           },
         });
         break;
@@ -276,6 +293,23 @@ export const useGame = create<AppState>((set, get) => {
       case 'rematch':
         set({ online: { ...get().online, rematchMine: message.mine, rematchTheirs: message.theirs } });
         break;
+      case 'draw': {
+        // El acuerdo viaja en cada movimiento, asi que los sonidos van en la TRANSICION y no
+        // en el mensaje: si no, sonarian en cada jugada.
+        const before = get().online;
+        if (message.theirs && !before.drawTheirs) playDrawOffer();
+        // Aceptar no pasa por aqui: cuando hay acuerdo el servidor manda el final y ya.
+        if (before.drawMine && !message.mine) playDrawDecline();
+        set({
+          online: {
+            ...before,
+            drawMine: message.mine,
+            drawTheirs: message.theirs,
+            drawMovesLeft: message.movesLeft,
+          },
+        });
+        break;
+      }
       case 'opponent':
         set({
           online: {
@@ -347,6 +381,9 @@ export const useGame = create<AppState>((set, get) => {
         opponentDeadline: null,
         rematchMine: false,
         rematchTheirs: false,
+        drawMine: false,
+        drawTheirs: false,
+        drawMovesLeft: 0,
       },
     confirmingLeave: false,
 
@@ -397,6 +434,9 @@ export const useGame = create<AppState>((set, get) => {
         opponentDeadline: null,
         rematchMine: false,
         rematchTheirs: false,
+        drawMine: false,
+        drawTheirs: false,
+        drawMovesLeft: 0,
       },
         ...renderLayer(view),
         animating: false,
@@ -460,6 +500,10 @@ export const useGame = create<AppState>((set, get) => {
 
     rematchOnline: () => socket?.send({ t: 'rematch' }),
 
+    // Ofrecer y aceptar son el mismo mensaje: las tablas se acuerdan cuando lo mandan los dos.
+    offerDrawOnline: () => socket?.send({ t: 'draw' }),
+    declineDrawOnline: () => socket?.send({ t: 'draw-decline' }),
+
     /**
      * Puerta unica del boton Menu. Solo hay algo que confirmar si irse tiene un coste:
      * una partida online en curso se cede al salir. En local o ya terminada, se sale.
@@ -496,6 +540,9 @@ export const useGame = create<AppState>((set, get) => {
         opponentDeadline: null,
         rematchMine: false,
         rematchTheirs: false,
+        drawMine: false,
+        drawTheirs: false,
+        drawMovesLeft: 0,
       },
         confirmingLeave: false,
       });

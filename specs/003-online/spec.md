@@ -2,7 +2,8 @@
 
 Estado: **activo** · Núcleo: `@cm/engine/room` · Transportes: `@cm/worker` (produccion) y
 `@cm/server` (LAN y desarrollo) · Tests: `packages/engine/tests/room.test.ts`,
-`packages/server/tests/lan.test.ts` (integracion) y `packages/client/tests/connect.test.ts`
+`packages/server/tests/lan.test.ts` (integracion), `packages/client/tests/connect.test.ts` y
+`packages/client/tests/draw.test.ts`
 
 Servidor autoritativo. Guarda el `GameState` completo, con las minas, y a los clientes solo
 les manda `PlayerView`.
@@ -183,3 +184,71 @@ Una revancha es un acuerdo entre dos, no una accion de uno.
   pedirla.
 - **AC-1206** Ausentarse retira la peticion, para que una revancha no arranque con alguien
   que ya no esta delante.
+
+## FR-13 - Ofrecer tablas
+
+La revancha (FR-12) se acuerda con la partida terminada. Las tablas se acuerdan en mitad de
+ella, y eso invierte las guardas: `requestRematch` rechaza si la partida sigue en curso, y
+ofrecer tablas rechaza justo al reves.
+
+Se sigue la regla FIDE (Art. 9.1.2): la oferta no se puede retirar y sigue en pie hasta que
+el rival la conteste, siendo mover una de las respuestas posibles.
+
+- **AC-1301** Las tablas necesitan que las quieran los dos. Con una sola oferta la partida
+  sigue.
+- **AC-1302** Ofrecer se le comunica al rival, y quien ofrece ve que esta esperando. Un boton
+  que no responde no se distingue de uno roto.
+- **AC-1303** Solo se puede ofrecer con la partida en curso: es lo contrario de la revancha,
+  que es lo que se ofrece al final.
+- **AC-1304** No se puede ofrecer si el rival no esta sentado: no hay con quien acordar.
+- **AC-1305** Rechazar retira la oferta y se le comunica a quien ofrecio. Un "no" tiene que
+  llegar: si no, no se distingue de un silencio.
+- **AC-1306** La oferta sigue en pie hasta que el rival la conteste, y mover es una de las
+  respuestas: si el rival mueve, ha rechazado. La posicion no caduca la oferta, la contesta.
+  El acuerdo viaja en CADA movimiento, no solo al ofrecer: mover contesta a la oferta del
+  rival y desbloquea la propia, asi que los dos tienen que verlo. Apagarla solo en el motor
+  deja los botones de aceptar y rechazar puestos, y entonces "aceptar" despues de mover
+  vuelve a ofrecer tablas sin que nadie lo haya pedido.
+- **AC-1307** La oferta no se puede retirar. Quien ofrece tablas se atiene a que se las
+  acepten. Ademas de ser la regla FIDE, evita que la retirada se convierta en una palanca
+  de tiempo el dia que exista un reloj: ofrecer, dejar que el rival lo piense con su reloj
+  corriendo, y retirarla.
+- **AC-1308** No se puede ofrecer mientras la propia sigue en pie, ni volver a ofrecer tras
+  un rechazo hasta 5 jugadas despues. Esperar solo a la jugada siguiente no alcanza: deja
+  ofrecer una vez por jugada, que es acoso con permiso. La espera se mide en jugadas y no en
+  un cupo por partida porque asi se adapta sola a lo que dure: en una partida corta salen
+  pocas oportunidades y en una larga, mas. Un cupo fijo seria tacaneria en unas y spam en
+  otras, y anadiria un juego de administrar propuestas que no es el ajedrez.
+- **AC-1314** Mientras haya que esperar, el boton dice cuantas jugadas faltan. Un boton que
+  se apaga sin explicarse no se distingue de uno roto, que es lo mismo que dice AC-1302.
+- **AC-1309** Ausentarse retira la oferta propia. Si no, quien esta a punto de perder por
+  ausencia (AC-1104) se llevaria unas tablas de una partida que ya estaba cediendo.
+- **AC-1310** Al aceptar, la partida termina con estado `draw`, sin ganador y con motivo
+  `agreed-draw`, en el mismo evento `end` que cualquier otro final (AC-1107).
+- **AC-1311** Aceptadas las tablas la partida esta terminada, asi que la revancha se pide
+  igual que tras cualquier otro final.
+- **AC-1312** Solo en online. Contra el bot no hay con quien acordar; en hotseat los dos
+  jugadores ya comparten la mesa.
+- **AC-1313** El boton vive en el HUD, durante la partida. FR-12 quito de ahi el de revancha
+  porque permitia reiniciarle la partida al rival sin avisarle; este actua en mitad del juego
+  a proposito, y solo con el consentimiento del otro.
+
+### Sobre el reloj que todavia no existe
+
+En FIDE se ofrecen tablas despues de mover y antes de apretar el reloj, para que el rival la
+piense con su tiempo. Ese orden solo es observable si hay reloj, y aqui todavia no lo hay:
+las tablas se pueden construir enteras sin el.
+
+Lo que si se decide ya, porque despues sale caro:
+
+- La oferta se apaga dentro de `playMove`, la unica puerta que modifica la partida. Es donde
+  latira el reloj tambien.
+- La oferta es un booleano por asiento; el reloj seran milisegundos por asiento. Campos
+  ortogonales, no se tocan.
+- No hay mensaje para retirar la oferta (AC-1307).
+
+Queda abierto para entonces si la oferta viaja atomica con el movimiento
+(`{ t: 'move', move, offerDraw: true }`) para caer en el tiempo del rival. Hoy es
+indistinguible de mandar `move` y `draw` seguidos, porque el WebSocket conserva el orden de
+la conexion; y esa variante se anade luego sin romper el mensaje suelto, que hace falta igual
+para ofrecer fuera de turno.

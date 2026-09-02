@@ -34,6 +34,17 @@ export interface Seat {
   disconnectedAt: number | null;
   /** Ha pedido la revancha. Se olvida al empezarla y al ausentarse. */
   wantsRematch: boolean;
+  /**
+   * Ha ofrecido tablas. Se olvida cuando el rival contesta —y mover es una de las
+   * respuestas, ver `playMove`—, al ausentarse y al empezar una partida nueva.
+   */
+  offersDraw: boolean;
+  /**
+   * Jugada a partir de la cual puede volver a ofrecer tablas, o `null` si no debe ninguna.
+   * Se mide en jugadas y no en un cupo por partida para que la espera se adapte sola a lo
+   * que dure: un cupo fijo seria tacaneria en una partida larga y spam en una corta.
+   */
+  drawAllowedFrom: number | null;
 }
 
 export interface RoomState {
@@ -53,6 +64,12 @@ export const isRoomError = <T>(r: T | RoomError): r is RoomError =>
 
 /** Salas sin nadie conectado durante mas de esto se pueden descartar. */
 export const ROOM_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Jugadas que hay que dejar pasar tras un rechazo antes de volver a ofrecer tablas.
+ * Esperar solo a la jugada siguiente permitiria una oferta por jugada, que es acoso.
+ */
+export const DRAW_COOLDOWN_MOVES = 5;
 
 /**
  * Ausencia a partir de la cual se pierde la partida.
@@ -112,6 +129,8 @@ export function takeSeat(
     session: newToken(),
     disconnectedAt: null,
     wantsRematch: false,
+    offersDraw: false,
+    drawAllowedFrom: null,
   };
   room.seats[color] = seat;
   room.lastActivity = now;
@@ -147,6 +166,14 @@ export function playMove(
   try {
     const result = applyMove(room.game, move);
     room.game = result.state;
+    // Mover es contestar que no (AC-1306, regla FIDE): la oferta que tenia el rival en pie
+    // se apaga aqui. La propia sobrevive al movimiento, porque en FIDE se ofrecen tablas
+    // justo despues de mover.
+    const rival = room.seats[opponentOf(color)];
+    if (rival?.offersDraw) {
+      rival.offersDraw = false;
+      rival.drawAllowedFrom = room.game.fullmove + DRAW_COOLDOWN_MOVES;
+    }
     room.lastActivity = now;
     return { events: result.events };
   } catch (err) {
@@ -162,6 +189,8 @@ export function rematch(room: RoomState, now = Date.now()): void {
   for (const seat of seats) {
     seat.color = seat.color === 'w' ? 'b' : 'w';
     seat.wantsRematch = false; // la siguiente revancha hay que volver a acordarla
+    seat.offersDraw = false; // partida nueva, tablero nuevo: la oferta anterior no significa nada
+    seat.drawAllowedFrom = null;
     room.seats[seat.color] = seat;
   }
   room.lastActivity = now;
@@ -192,6 +221,98 @@ export function requestRematch(
   return { agreed: true };
 }
 
+/**
+ * Ofrece tablas, o las acepta: es el mismo gesto. Las tablas se acuerdan cuando las quieren
+ * los dos, igual que la revancha, pero al reves en el tiempo: la revancha se pacta con la
+ * partida terminada y las tablas en mitad de ella, asi que la guarda del estado se invierte.
+ *
+ * Se sigue la regla FIDE (Art. 9.1.2): la oferta no se puede retirar y sigue en pie hasta
+ * que el rival la conteste. Mover es una de las respuestas, y de eso se ocupa `playMove`.
+ */
+export function offerDraw(
+  room: RoomState,
+  color: Color,
+  now = Date.now(),
+): { agreed: boolean; events: GameEvent[] } | RoomError {
+  const seat = room.seats[color];
+  if (!seat) return { error: 'No estas sentado en esta sala' };
+  if (room.game.status !== 'playing') return { error: 'La partida ya ha terminado' };
+
+  const rival = room.seats[opponentOf(color)];
+  if (!rival) return { error: 'Tu rival ya no esta en la sala' };
+  if (seat.offersDraw) return { error: 'Ya has ofrecido tablas' };
+  const left = drawMovesLeft(room, color);
+  if (left > 0) {
+    return { error: `Faltan ${left} ${left === 1 ? 'jugada' : 'jugadas'} para volver a ofrecer tablas` };
+  }
+
+  seat.offersDraw = true;
+  room.lastActivity = now;
+  if (!rival.offersDraw) return { agreed: false, events: [] };
+
+  // Acordadas: la oferta ya se ha gastado, y dejarla en pie haria que el boton siguiera
+  // diciendo "esperando" sobre una partida que ya termino.
+  seat.offersDraw = false;
+  rival.offersDraw = false;
+  room.game.status = 'draw';
+  room.game.winner = null;
+  room.game.endReason = 'agreed-draw';
+  // Mismo evento `end` que cualquier otro final: los transportes y el cliente no necesitan
+  // un camino aparte para este caso.
+  return {
+    agreed: true,
+    events: [{ type: 'end', status: 'draw', winner: null, reason: 'agreed-draw' }],
+  };
+}
+
+/**
+ * Rechaza la oferta del rival. Existe aunque mover ya sea un rechazo (AC-1306) porque un
+ * "no" tiene que poder llegar en el momento: si la unica forma de negarse fuera mover, quien
+ * ofrecio no distinguiria el rechazo de que el otro se lo este pensando.
+ */
+export function declineDraw(
+  room: RoomState,
+  color: Color,
+  now = Date.now(),
+): { declined: boolean } | RoomError {
+  const seat = room.seats[color];
+  if (!seat) return { error: 'No estas sentado en esta sala' };
+  if (room.game.status !== 'playing') return { error: 'La partida ya ha terminado' };
+
+  const rival = room.seats[opponentOf(color)];
+  if (!rival?.offersDraw) return { error: 'No hay ninguna oferta de tablas que rechazar' };
+
+  rival.offersDraw = false;
+  // Quien se lleva el no tiene que dejar pasar unas cuantas jugadas antes de insistir.
+  rival.drawAllowedFrom = room.game.fullmove + DRAW_COOLDOWN_MOVES;
+  room.lastActivity = now;
+  return { declined: true };
+}
+
+/**
+ * Cuantas jugadas le faltan a `color` para poder volver a ofrecer tablas; 0 si ya puede.
+ *
+ * Vive aqui, y no en cada transporte ni en el cliente, para que la espera que se le ensena
+ * al jugador y la que aplica el servidor no puedan discrepar. Es la misma razon por la que
+ * `absenceMsLeft` es la unica fuente del plazo de abandono.
+ */
+export function drawMovesLeft(room: RoomState, color: Color): number {
+  const from = room.seats[color]?.drawAllowedFrom;
+  if (from === undefined || from === null) return 0;
+  return Math.max(0, from - room.game.fullmove);
+}
+
+/**
+ * Si `color` puede ofrecer tablas ahora mismo. Vive aqui, y no en cada transporte, para que
+ * lo que el boton deja hacer y lo que el servidor acepta no puedan discrepar.
+ */
+export function canOfferDraw(room: RoomState, color: Color): boolean {
+  const seat = room.seats[color];
+  if (!seat || room.game.status !== 'playing') return false;
+  if (!room.seats[opponentOf(color)]) return false;
+  return !seat.offersDraw && drawMovesLeft(room, color) === 0;
+}
+
 /** Proyeccion que se envia a un jugador. Nunca incluye el campo de minas. */
 export const viewFor = (room: RoomState, color: Color): PlayerView => toView(room.game, color);
 
@@ -211,6 +332,9 @@ export function markDisconnected(
   seat.disconnectedAt = now;
   // Una revancha no puede arrancar con alguien que ya no esta delante.
   seat.wantsRematch = false;
+  // Ni unas tablas: quien esta a punto de perder por ausencia no se lleva medio punto de
+  // una partida que ya estaba cediendo.
+  seat.offersDraw = false;
   room.lastActivity = now;
   return true;
 }

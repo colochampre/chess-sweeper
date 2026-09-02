@@ -4,7 +4,10 @@ import {
   absenceMsLeft,
   ROOM_CODE_LENGTH,
   ROOM_TTL_MS,
+  DRAW_COOLDOWN_MOVES,
   createRoom,
+  declineDraw,
+  drawMovesLeft,
   forfeitAbsent,
   generateRoomCode,
   intentToQuery,
@@ -13,6 +16,7 @@ import {
   leaveRoom,
   legalMoves,
   markDisconnected,
+  offerDraw,
   parseIntent,
   playMove,
   rematch,
@@ -423,5 +427,144 @@ describe('FR-12 la revancha se acuerda', () => {
     const alone = ok(requestRematch(r, guest.color));
     expect(alone.agreed).toBe(false);
     expect(r.game.status).toBe('abandoned');
+  });
+});
+
+describe('FR-13 ofrecer tablas', () => {
+  /** Sala con los dos sentados y la partida en curso: ofrecer tablas se hace jugando. */
+  const playing = () => {
+    const r = room();
+    const host = seatOf(takeSeat(r));
+    const guest = seatOf(takeSeat(r));
+    return { r, host, guest };
+  };
+
+  const ok = <T>(result: T | RoomError): T => {
+    if (isRoomError(result)) throw new Error(`resultado inesperado: ${result.error}`);
+    return result;
+  };
+
+  it('AC-1301: con una sola oferta la partida sigue', () => {
+    const { r, host } = playing();
+
+    const first = ok(offerDraw(r, host.color));
+
+    expect(first.agreed).toBe(false);
+    expect(first.events).toEqual([]);
+    expect(r.game.status).toBe('playing');
+  });
+
+  it('AC-1310: aceptadas, la partida termina en tablas por acuerdo', () => {
+    const { r, host, guest } = playing();
+
+    offerDraw(r, host.color);
+    const accepted = ok(offerDraw(r, guest.color));
+
+    expect(accepted.agreed).toBe(true);
+    expect(r.game.status).toBe('draw');
+    expect(r.game.winner).toBeNull();
+    expect(r.game.endReason).toBe('agreed-draw');
+    // Mismo evento `end` que cualquier otro final: los transportes no necesitan otro camino.
+    expect(accepted.events).toEqual([
+      { type: 'end', status: 'draw', winner: null, reason: 'agreed-draw' },
+    ]);
+  });
+  it('AC-1305: rechazar retira la oferta del rival', () => {
+    const { r, host, guest } = playing();
+
+    offerDraw(r, host.color);
+    ok(declineDraw(r, guest.color));
+
+    expect(r.seats[host.color]?.offersDraw).toBe(false);
+    expect(r.game.status).toBe('playing');
+  });
+
+  it('AC-1306: que el rival mueva retira la oferta; el propio movimiento no', () => {
+    const { r, host, guest } = playing();
+    r.game.mines.fill(false); // sin detonaciones: aqui se mide el acuerdo, no el tablero
+
+    offerDraw(r, host.color);
+    // En FIDE se ofrecen tablas justo despues de mover, asi que mover no se autorechaza.
+    ok(playMove(r, host.color, { from: 12, to: 28 }));
+    expect(r.seats[host.color]?.offersDraw).toBe(true);
+
+    // Pero el movimiento del rival SI es su respuesta: ha dicho que no.
+    ok(playMove(r, guest.color, { from: 52, to: 36 }));
+    expect(r.seats[host.color]?.offersDraw).toBe(false);
+    expect(r.game.status).toBe('playing');
+  });
+
+  it('AC-1308: no se puede ofrecer dos veces mientras la propia sigue en pie', () => {
+    const { r, host } = playing();
+
+    offerDraw(r, host.color);
+
+    expect(isRoomError(offerDraw(r, host.color))).toBe(true);
+  });
+
+  it('AC-1308: tras un rechazo hay que esperar 5 jugadas para volver a ofrecer', () => {
+    const { r, host, guest } = playing();
+
+    offerDraw(r, host.color);
+    declineDraw(r, guest.color);
+
+    // Esperar solo a la jugada siguiente dejaria ofrecer una vez por jugada: acoso con
+    // permiso. La espera se mide en jugadas para adaptarse a lo que dure la partida.
+    expect(isRoomError(offerDraw(r, host.color))).toBe(true);
+    expect(drawMovesLeft(r, host.color)).toBe(DRAW_COOLDOWN_MOVES);
+
+    r.game.fullmove += DRAW_COOLDOWN_MOVES - 1;
+    expect(isRoomError(offerDraw(r, host.color))).toBe(true);
+    expect(drawMovesLeft(r, host.color)).toBe(1);
+
+    r.game.fullmove += 1;
+    expect(drawMovesLeft(r, host.color)).toBe(0);
+    expect(isRoomError(offerDraw(r, host.color))).toBe(false);
+  });
+
+  it('AC-1308: la primera propuesta no espera nada', () => {
+    const { r, host } = playing();
+
+    expect(drawMovesLeft(r, host.color)).toBe(0);
+    expect(isRoomError(offerDraw(r, host.color))).toBe(false);
+  });
+
+  it('AC-1308: el rival rechaza moviendo y la espera corre igual', () => {
+    const { r, host, guest } = playing();
+    r.game.mines.fill(false);
+
+    offerDraw(r, host.color);
+    ok(playMove(r, host.color, { from: 12, to: 28 }));
+    ok(playMove(r, guest.color, { from: 52, to: 36 })); // mover es rechazar
+
+    expect(drawMovesLeft(r, host.color)).toBeGreaterThan(0);
+    expect(isRoomError(offerDraw(r, host.color))).toBe(true);
+  });
+
+  it('AC-1303: no se puede ofrecer con la partida ya terminada', () => {
+    const { r, host } = playing();
+    r.game.status = 'checkmate';
+
+    expect(isRoomError(offerDraw(r, host.color))).toBe(true);
+  });
+
+  it('AC-1304: no se puede ofrecer si el rival no esta sentado', () => {
+    const { r, host, guest } = playing();
+    delete r.seats[guest.color];
+
+    expect(isRoomError(offerDraw(r, host.color))).toBe(true);
+  });
+
+  it('AC-1309: ausentarse retira la oferta propia', () => {
+    const { r, host, guest } = playing();
+
+    offerDraw(r, host.color);
+    markDisconnected(r, host.color, host.session);
+
+    expect(r.seats[host.color]?.offersDraw).toBe(false);
+    // Y la del rival ya no alcanza para cerrar el acuerdo sin el.
+    const alone = ok(offerDraw(r, guest.color));
+    expect(alone.agreed).toBe(false);
+    expect(r.game.status).toBe('playing');
   });
 });

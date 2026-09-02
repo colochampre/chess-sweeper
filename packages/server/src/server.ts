@@ -29,6 +29,9 @@ import {
   opponentOf,
   parseIntent,
   playMove,
+  declineDraw,
+  drawMovesLeft,
+  offerDraw,
   requestRematch,
   resumeSeat,
   takeSeat,
@@ -155,6 +158,20 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     }
   }
 
+  /** Quien ha ofrecido tablas, por el mismo motivo: una oferta muda no se ve. */
+  function broadcastDrawState(room: RoomState): void {
+    for (const color of ['w', 'b'] as const) {
+      const target = members.get(room.code)?.get(color);
+      if (!target) continue;
+      send(target, {
+        t: 'draw',
+        mine: room.seats[color]?.offersDraw === true,
+        theirs: room.seats[opponentOf(color)]?.offersDraw === true,
+        movesLeft: drawMovesLeft(room, color),
+      });
+    }
+  }
+
   function seat(socket: WebSocket, room: RoomState, taken: Seat): void {
     const { color, token, session } = taken;
     const roomMembers = members.get(room.code) ?? new Map<Color, WebSocket>();
@@ -239,7 +256,26 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
             return send(socket, { t: 'sync', view: viewFor(room, color) });
           }
           broadcastEvents(room, result.events);
+          // Mover contesta a la oferta del rival y desbloquea la propia (AC-1306/1308), asi
+          // que el acuerdo cambia en CADA movimiento. Sin avisarlo, los botones se quedan
+          // puestos y pulsar "aceptar" despues de mover vuelve a ofrecer tablas.
+          broadcastDrawState(room);
           return;
+        }
+        case 'draw': {
+          const offered = offerDraw(room, color);
+          if (isRoomError(offered)) return send(socket, { t: 'error', message: offered.error });
+          // Con una sola oferta no termina nada: se avisa a los dos y se espera respuesta.
+          if (!offered.agreed) return broadcastDrawState(room);
+          // Acordadas: solo el final. Mandar ademas el acuerdo en blanco se leeria como un
+          // rechazo justo antes de las tablas, y el boton ya desaparece con la partida.
+          broadcastEvents(room, offered.events);
+          return;
+        }
+        case 'draw-decline': {
+          const refused = declineDraw(room, color);
+          if (isRoomError(refused)) return send(socket, { t: 'error', message: refused.error });
+          return broadcastDrawState(room);
         }
         case 'rematch': {
           const asked = requestRematch(room, color);

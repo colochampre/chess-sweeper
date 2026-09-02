@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Color, EndReason, PieceType } from '@cm/engine';
 import { MINE_SRC, PIECE_VALUE, pieceSrc } from '../theme.js';
 import { useGame } from '../store.js';
+import { drawButton } from '../online.js';
 
 export const COLOR_NAME: Record<Color, string> = { w: 'Blancas', b: 'Negras' };
 
@@ -13,6 +14,7 @@ export const END_TEXT: Record<EndReason, string> = {
   'insufficient-material': 'Tablas por material insuficiente',
   'fifty-move': 'Tablas por la regla de 50 jugadas',
   abandoned: 'Partida abandonada',
+  'agreed-draw': 'Tablas acordadas',
 };
 
 /**
@@ -41,6 +43,12 @@ export function Hud() {
   const secondsLeft = useSecondsLeft(s.online.opponentDeadline);
   const view = s.view;
   if (view === null) return null;
+
+  const draw = drawButton({
+    mine: s.online.drawMine,
+    theirs: s.online.drawTheirs,
+    movesLeft: s.online.drawMovesLeft,
+  });
 
   const lost = (color: Color): PieceType[] =>
     view.captured.filter((p) => p.color === color).map((p) => p.type);
@@ -135,6 +143,27 @@ export function Hud() {
           </>
         )}
         <button onClick={s.flipBoard}>Girar tablero</button>
+        {/* Las tablas se ofrecen jugando, asi que el boton vive con el resto de acciones del
+            tablero y no en el final. Es el sitio del que FR-12 quito el de revancha, porque
+            aquel reiniciaba la partida del rival sin avisarle; este no hace nada sin el
+            consentimiento del otro. */}
+        {s.mode === 'online' && view.status === 'playing' && (
+          <div className="draw-offer">
+            {/* Ofrecer y aceptar mandan lo mismo: el acuerdo lo cierran los dos. */}
+            <button
+              className={s.online.drawTheirs ? 'primary' : undefined}
+              disabled={draw.disabled}
+              onClick={s.offerDrawOnline}
+            >
+              {draw.label}
+            </button>
+            {s.online.drawTheirs && (
+              <button className="danger" onClick={s.declineDrawOnline}>
+                Rechazar
+              </button>
+            )}
+          </div>
+        )}
         <label className="check-row">
           <input
             type="checkbox"

@@ -170,3 +170,33 @@ export class OnlineClient {
     return this.socket?.readyState === WebSocket.OPEN;
   }
 }
+
+/** Lo que el boton de tablas ofrece hacer ahora mismo. */
+export interface DrawButton {
+  label: string;
+  action: 'offer' | 'accept';
+  disabled: boolean;
+}
+
+/**
+ * Estado del boton de tablas, en funcion del acuerdo que reporta el servidor.
+ *
+ * Es puro a proposito: el cliente no tiene montaje de DOM en los tests, asi que la decision
+ * se comprueba sin navegador. Y `movesLeft` lo cuenta el servidor (`drawMovesLeft` en el
+ * motor), de modo que el boton no ofrezca lo que el servidor va a rechazar.
+ */
+export function drawButton(offer: {
+  mine: boolean;
+  theirs: boolean;
+  movesLeft: number;
+}): DrawButton {
+  // Deber jugadas antes de volver a ofrecer no impide decir que si: son cosas distintas.
+  if (offer.theirs) return { label: 'Aceptar tablas', action: 'accept', disabled: false };
+  if (offer.mine) return { label: 'Tablas ofrecidas', action: 'offer', disabled: true };
+  // Un boton que se apaga sin explicarse no se distingue de uno roto: dice lo que falta.
+  if (offer.movesLeft > 0) {
+    const unit = offer.movesLeft === 1 ? 'jugada' : 'jugadas';
+    return { label: `Tablas en ${offer.movesLeft} ${unit}`, action: 'offer', disabled: true };
+  }
+  return { label: 'Ofrecer tablas', action: 'offer', disabled: false };
+}

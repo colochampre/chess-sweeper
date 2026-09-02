@@ -186,6 +186,25 @@ export function playDraw(): void {
   });
 }
 
+/**
+ * Dos notas que preguntan, la segunda mas alta: el rival ofrece tablas. Deliberadamente
+ * distinto de `playDraw`, que baja y cierra: esto abre una pregunta, no cierra la partida.
+ */
+export function playDrawOffer(): void {
+  const ac = audio();
+  if (ac === null) return;
+  [392, 523.25].forEach((f, i) => {
+    tone(ac, { from: f, type: 'triangle', at: i * 0.13, duration: 0.2, gain: 0.13 });
+  });
+}
+
+/** Una nota corta y seca: la oferta se rechaza y se sigue jugando. */
+export function playDrawDecline(): void {
+  const ac = audio();
+  if (ac === null) return;
+  tone(ac, { from: 330, to: 262, type: 'triangle', duration: 0.16, gain: 0.12 });
+}
+
 export type Outcome = 'win' | 'loss' | 'draw';
 
 export function playOutcome(outcome: Outcome): void {

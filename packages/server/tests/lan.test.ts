@@ -351,3 +351,99 @@ describe('FR-12 la revancha se acuerda', () => {
     guest.bye();
   });
 });
+
+describe('FR-13 ofrecer tablas', () => {
+  /** Deja la sala con los dos sentados y la partida en curso. */
+  const bothSeated = async (): Promise<{ host: Client; guest: Client }> => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') throw new Error('el anfitrion no se sento');
+
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('opponent', (m) => m.t === 'opponent' && m.connected);
+    return { host, guest };
+  };
+
+  it('AC-1301: una sola oferta llega al rival y no termina la partida', async () => {
+    const { host, guest } = await bothSeated();
+
+    host.send({ t: 'draw' });
+
+    // Al rival le llega que se la han ofrecido; a quien ofrece, que esta esperando.
+    const theirs = await guest.waitFor('draw');
+    expect(theirs).toMatchObject({ t: 'draw', mine: false, theirs: true });
+    const mine = await host.waitFor('draw');
+    expect(mine).toMatchObject({ t: 'draw', mine: true, theirs: false });
+
+    // Y la partida sigue: nadie ha recibido un final.
+    expect(await notReceived(guest, 'moved')).toBe(true);
+
+    host.bye();
+    guest.bye();
+  });
+
+  it('AC-1310: aceptada, el final por acuerdo llega a los dos', async () => {
+    const { host, guest } = await bothSeated();
+
+    host.send({ t: 'draw' });
+    await guest.waitFor('draw');
+    guest.send({ t: 'draw' });
+
+    // Mismo evento `end` que cualquier otro final, y le llega a los dos asientos.
+    for (const client of [host, guest]) {
+      const ended = await client.waitFor('moved');
+      expect(ended.t === 'moved' && ended.events).toContainEqual({
+        type: 'end',
+        status: 'draw',
+        winner: null,
+        reason: 'agreed-draw',
+      });
+      expect(ended.t === 'moved' && ended.view.status).toBe('draw');
+      expect(ended.t === 'moved' && ended.view.winner).toBeNull();
+    }
+
+    host.bye();
+    guest.bye();
+  });
+  it('AC-1305: el rechazo llega a quien ofrecio, no se queda en silencio', async () => {
+    const { host, guest } = await bothSeated();
+
+    host.send({ t: 'draw' });
+    await guest.waitFor('draw', (m) => m.t === 'draw' && m.theirs);
+
+    guest.send({ t: 'draw-decline' });
+
+    // Quien ofrecio se entera de que ya no hay oferta en pie.
+    const cleared = await host.waitFor('draw', (m) => m.t === 'draw' && !m.mine);
+    expect(cleared).toMatchObject({ t: 'draw', mine: false, theirs: false });
+    // Y la partida sigue: rechazar no termina nada.
+    expect(await notReceived(host, 'moved')).toBe(true);
+
+    host.bye();
+    guest.bye();
+  });
+  it('AC-1306: al mover el rival, la oferta se retira TAMBIEN en el HUD de los dos', async () => {
+    const { host, guest } = await bothSeated();
+
+    host.send({ t: 'draw' });
+    await guest.waitFor('draw', (m) => m.t === 'draw' && m.theirs);
+
+    // Caballos de esquinas opuestas (b1-a3 y g8-h6): con peones centrales, la explosion de
+    // una mina bajo el primero puede dejar un crater justo donde iba el segundo, y entonces
+    // el test se cuelga esperando una jugada que el servidor rechaza con razon.
+    host.send({ t: 'move', move: { from: 1, to: 16 } });
+    await guest.waitFor('moved');
+    guest.send({ t: 'move', move: { from: 62, to: 47 } });
+
+    // Sin esto los botones de aceptar y rechazar se quedan puestos, y pulsar "aceptar"
+    // despues de mover vuelve a ofrecer tablas sin que el jugador lo pida.
+    const gone = await guest.waitFor('draw', (m) => m.t === 'draw' && !m.theirs);
+    expect(gone).toMatchObject({ t: 'draw', mine: false, theirs: false });
+    const cleared = await host.waitFor('draw', (m) => m.t === 'draw' && !m.mine);
+    expect(cleared.t === 'draw' && cleared.movesLeft).toBeGreaterThan(0); // tiene que esperar
+
+    host.bye();
+    guest.bye();
+  });
+});

@@ -8,6 +8,7 @@ import {
   normalizeRoomCode,
   type Color,
   type Difficulty,
+  type TimeControl,
 } from '@cm/engine';
 import { MINE_SRC, pieceSrc } from '../theme.js';
 import { useGame, type Mode } from '../store.js';
@@ -18,6 +19,14 @@ const MODES: { value: Mode; label: string; hint: string }[] = [
   { value: 'online', label: 'Online', hint: 'Crea una sala o entra con un codigo' },
   { value: 'bot', label: 'Contra la maquina', hint: 'Elige la fuerza del rival' },
   { value: 'hotseat', label: 'Dos jugadores', hint: 'Mismo dispositivo, el tablero gira en cada turno' },
+];
+
+/** El primero es el de por defecto: sin reloj, que es como se jugaba hasta ahora. */
+const TIME_OPTIONS: { value: TimeControl; label: string; hint: string }[] = [
+  { value: 'none', label: 'Sin reloj', hint: 'Sin prisa' },
+  { value: '5+2', label: '5+2', hint: '5 min y 2 s por jugada' },
+  { value: '10+5', label: '10+5', hint: '10 min y 5 s por jugada' },
+  { value: '15+10', label: '15+10', hint: '15 min y 10 s por jugada' },
 ];
 
 const DIFFICULTIES: { value: Difficulty; label: string }[] = [
@@ -34,6 +43,7 @@ export function Menu() {
   // Al azar por defecto: en online el color se negocia con el rival, y elegir blancas de
   // entrada da la primera jugada a quien monta la sala sin que nadie lo haya acordado.
   const [color, setColor] = useState<Color | 'random'>('random');
+  const [timeControl, setTimeControl] = useState<TimeControl>(TIME_OPTIONS[0].value);
   const [boardSize, setBoardSize] = useState(8);
   const [joinCode, setJoinCode] = useState('');
 
@@ -125,6 +135,28 @@ export function Menu() {
         </section>
       )}
 
+      {mode === 'online' && (
+        <section>
+          <h2>Reloj</h2>
+          <div className="options">
+            {TIME_OPTIONS.map((t) => (
+              <button
+                key={t.value}
+                className={`option${timeControl === t.value ? ' active' : ''}`}
+                onClick={() => setTimeControl(t.value)}
+              >
+                <strong>{t.label}</strong>
+                <small>{t.hint}</small>
+              </button>
+            ))}
+          </div>
+          <p className="hint">
+            Con reloj, ausentarse lo detiene: cada jugador tiene 2 minutos de ausencia por
+            partida, y al agotarlos gana el rival.
+          </p>
+        </section>
+      )}
+
       {mode !== 'hotseat' && (
         <section>
           <h2>Tu color</h2>
@@ -167,7 +199,7 @@ export function Menu() {
         <section className="online-actions">
           <button
             className="primary"
-            onClick={() => hostOnline({ difficulty, boardSize, hostColor: color })}
+            onClick={() => hostOnline({ difficulty, boardSize, hostColor: color, timeControl })}
           >
             Crear sala
           </button>

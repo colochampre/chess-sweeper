@@ -24,7 +24,14 @@ import {
   type ConnectIntent,
 } from '@cm/engine';
 import { playEvents, type AnimApi } from './anim/eventPlayer.js';
-import { OnlineClient, clearSeat, loadSeat, planConnect, saveSeat } from './online.js';
+import {
+  OnlineClient,
+  clearSeat,
+  loadSeat,
+  planConnect,
+  saveSeat,
+  type ClockView,
+} from './online.js';
 import {
   playDrawDecline,
   playDrawOffer,
@@ -75,6 +82,8 @@ export interface OnlineInfo {
   drawTheirs: boolean;
   /** Jugadas que faltan para poder volver a ofrecer tablas. Las cuenta el servidor. */
   drawMovesLeft: number;
+  /** Lo ultimo que dijo el servidor del reloj, o `null` si la sala se juega sin el. */
+  clock: ClockView | null;
 }
 
 interface AppState {
@@ -271,6 +280,7 @@ export const useGame = create<AppState>((set, get) => {
             drawMine: false,
             drawTheirs: false,
             drawMovesLeft: 0,
+        clock: null,
           },
         });
         break;
@@ -292,6 +302,16 @@ export const useGame = create<AppState>((set, get) => {
       }
       case 'rematch':
         set({ online: { ...get().online, rematchMine: message.mine, rematchTheirs: message.theirs } });
+        break;
+      case 'clock':
+        // Se apunta CUANDO llego, con el reloj de esta maquina: el cliente descuenta desde
+        // ahi y cada mensaje lo vuelve a poner en hora (AC-1412).
+        set({
+          online: {
+            ...get().online,
+            clock: { left: message.left, running: message.running, receivedAt: Date.now() },
+          },
+        });
         break;
       case 'draw': {
         // El acuerdo viaja en cada movimiento, asi que los sonidos van en la TRANSICION y no
@@ -384,6 +404,7 @@ export const useGame = create<AppState>((set, get) => {
         drawMine: false,
         drawTheirs: false,
         drawMovesLeft: 0,
+        clock: null,
       },
     confirmingLeave: false,
 
@@ -437,6 +458,7 @@ export const useGame = create<AppState>((set, get) => {
         drawMine: false,
         drawTheirs: false,
         drawMovesLeft: 0,
+        clock: null,
       },
         ...renderLayer(view),
         animating: false,
@@ -543,6 +565,7 @@ export const useGame = create<AppState>((set, get) => {
         drawMine: false,
         drawTheirs: false,
         drawMovesLeft: 0,
+        clock: null,
       },
         confirmingLeave: false,
       });

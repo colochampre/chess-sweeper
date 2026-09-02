@@ -54,6 +54,11 @@ Durable Object de la sala tiene que decidirse **antes** de aceptar el socket.
 - **AC-502** Se rechaza cualquier parametro que no cuadre: accion desconocida, dificultad
   inventada, tablero fuera de rango, codigo con caracteres fuera del alfabeto, token que no
   tiene forma de UUID. El codigo se normaliza antes de validarse.
+- **AC-503** La version del protocolo viaja tambien en la URL, y el servidor solo acepta la
+  suya. `PROTOCOL_VERSION` existia como numero que nadie miraba: documentaba el formato del
+  cable sin protegerlo, asi que un cliente viejo contra un servidor nuevo no se rechazaba, se
+  rompia raro. Una pestana abierta desde antes de un despliegue es el caso normal, no el
+  raro. Sin version tampoco se entra: un cliente que no la manda es, justamente, uno viejo.
 
 ## FR-6 · Produccion sobre Durable Objects
 
@@ -111,6 +116,14 @@ Un `socket.destroy()` a secas no deja al cliente ni un motivo: se queda en "Cone
 - **AC-902** Un origen ajeno se rechaza con 403 antes del apreton de manos.
 - **AC-903** El circuito de desarrollo (Vite en otro puerto) si se acepta.
 - **AC-904** Los parametros invalidos se rechazan con 400, tambien antes del apreton de manos.
+- **AC-905** Una version de protocolo que no coincide abre el socket, manda `error` diciendo
+  que hay que recargar y cierra con `CLOSE_REFUSED`, igual que AC-901.
+  Este no se rechaza antes del apreton de manos, y es a proposito: el navegador no le deja
+  leer al cliente ni el codigo ni el motivo de un upgrade fallido, asi que un 426 seria
+  correcto de libro y dejaria al jugador exactamente igual que el `socket.destroy()` a secas
+  que abre este FR. Aqui hace falta que el motivo llegue, porque el arreglo lo tiene que
+  hacer el jugador: recargar. Antes del apreton de manos se rechaza lo que el jugador no
+  puede arreglar (AC-902, AC-904); despues, lo que si.
 
 ## FR-10 · Politica de reconexion del cliente
 

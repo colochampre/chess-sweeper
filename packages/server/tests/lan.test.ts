@@ -308,3 +308,46 @@ describe('FR-11 abandonar una partida', () => {
     other.bye();
   });
 });
+
+describe('FR-12 la revancha se acuerda', () => {
+  it('AC-1203: pedir revancha en plena partida se rechaza con su motivo', async () => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('opponent', (m) => m.t === 'opponent' && m.connected);
+
+    host.send({ t: 'rematch' });
+
+    const refused = await host.waitFor('error');
+    expect(refused.t === 'error' && refused.message).toMatch(/no ha terminado/i);
+    // Y nadie ha reiniciado nada: el rival no recibe un asiento nuevo.
+    expect(await notReceived(guest, 'rematch')).toBe(true);
+
+    host.bye();
+    guest.bye();
+  });
+
+  it('AC-1204: tras un abandono, la revancha no deja al que se queda solo en la sala', async () => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('opponent', (m) => m.t === 'opponent' && m.connected);
+
+    host.send({ t: 'leave' });
+    await guest.waitFor('moved');
+    host.bye();
+
+    // El rival se fue: no hay con quien acordar, asi que se dice en vez de arrancar solo.
+    guest.send({ t: 'rematch' });
+    const refused = await guest.waitFor('error');
+    expect(refused.t === 'error' && refused.message).toMatch(/rival/i);
+
+    guest.bye();
+  });
+});

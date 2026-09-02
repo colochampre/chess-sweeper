@@ -11,6 +11,18 @@ export function GameOver() {
   // En online el rival es una persona. Llamarlo "la maquina" solo tiene sentido contra el bot.
   const defeatText = s.mode === 'bot' ? 'Gana la maquina.' : 'Gana tu rival.';
 
+  // La revancha se acuerda entre dos: el boton dice en que punto esta el acuerdo, porque un
+  // boton que no responde no se distingue de uno roto.
+  const rematchPending = s.mode === 'online' && s.online.rematchMine;
+  const rematchLabel =
+    s.mode !== 'online'
+      ? 'Otra partida'
+      : s.online.rematchMine
+        ? 'Esperando a tu rival…'
+        : s.online.rematchTheirs
+          ? 'Tu rival quiere la revancha'
+          : 'Revancha';
+
   return (
     <div className="game-over">
       <div className="card">
@@ -25,8 +37,8 @@ export function GameOver() {
                 : `Ganan las ${COLOR_NAME[view.winner].toLowerCase()}.`}
         </p>
         <div className="row">
-          <button className="primary" onClick={() => s.restart()}>
-            {s.mode === 'online' ? 'Revancha' : 'Otra partida'}
+          <button className="primary" onClick={() => s.restart()} disabled={rematchPending}>
+            {rematchLabel}
           </button>
           {s.mode !== 'online' && (
             <button onClick={() => s.restart(undefined, s.seed)}>Repetir semilla</button>

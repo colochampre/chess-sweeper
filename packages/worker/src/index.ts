@@ -32,7 +32,7 @@ import {
   opponentOf,
   parseIntent,
   playMove,
-  rematch,
+  requestRematch,
   resumeSeat,
   takeSeat,
   viewFor,
@@ -207,6 +207,18 @@ export class Room implements DurableObject {
     }
   }
 
+  /** Quien ha pedido la revancha, para que el boton diga si esta esperando o le esperan. */
+  private broadcastRematchState(): void {
+    if (this.room === null) return;
+    for (const color of ['w', 'b'] as const) {
+      this.send(color, {
+        t: 'rematch',
+        mine: this.room.seats[color]?.wantsRematch === true,
+        theirs: this.room.seats[opponentOf(color)]?.wantsRematch === true,
+      });
+    }
+  }
+
   private broadcastPresence(): void {
     if (this.room === null) return;
     for (const color of ['w', 'b'] as const) {
@@ -327,7 +339,16 @@ export class Room implements DurableObject {
       }
 
       case 'rematch': {
-        rematch(this.room);
+        const asked = requestRematch(this.room, color);
+        if (isRoomError(asked)) {
+          return ws.send(encode({ t: 'error', message: asked.error }));
+        }
+        // Con una sola peticion no se reinicia nada: se avisa a los dos y se espera.
+        if (!asked.agreed) {
+          this.broadcastRematchState();
+          await this.save();
+          return;
+        }
         // Los colores se intercambian, asi que cada socket se resienta en el suyo. El
         // asiento conserva su sesion, de modo que un socket ya reemplazado no coincide con
         // ninguno y se salta: si se le dejara escribir, reintroduciria el bug de AC-305.

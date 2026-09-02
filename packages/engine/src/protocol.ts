@@ -41,6 +41,8 @@ export type ServerMessage =
   | { t: 'moved'; events: GameEvent[]; view: PlayerView }
   /** Presencia del rival. Si esta ausente, `msLeft` dice cuanto le queda antes de perder. */
   | { t: 'opponent'; connected: boolean; msLeft?: number }
+  /** Estado del acuerdo de revancha: quien la ha pedido de los dos. */
+  | { t: 'rematch'; mine: boolean; theirs: boolean }
   | { t: 'error'; message: string };
 
 /**

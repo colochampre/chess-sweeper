@@ -16,9 +16,11 @@ import {
   parseIntent,
   playMove,
   rematch,
+  requestRematch,
   resumeSeat,
   takeSeat,
   viewFor,
+  type RoomError,
   type RoomSettings,
   type Seat,
 } from '@cm/engine';
@@ -336,5 +338,90 @@ describe('FR-11 abandonar una partida', () => {
     markDisconnected(r, guest.color, guest.session, Date.now());
     expect(forfeitAbsent(r, Date.now() + ABSENCE_FORFEIT_MS + 1)).toBeNull();
     expect(r.game.winner).toBe(guest.color);
+  });
+});
+
+describe('FR-12 la revancha se acuerda', () => {
+  /** Sala con los dos sentados y la partida ya terminada por abandono del anfitrion. */
+  const finished = () => {
+    const r = room();
+    const host = seatOf(takeSeat(r));
+    const guest = seatOf(takeSeat(r));
+    // Se termina sin que nadie deje su asiento: `rematch` necesita a los dos sentados.
+    r.game.status = 'abandoned';
+    r.game.winner = guest.color;
+    r.game.endReason = 'abandoned';
+    return { r, host, guest };
+  };
+
+  const ok = <T>(result: T | RoomError): T => {
+    if (isRoomError(result)) throw new Error(`resultado inesperado: ${result.error}`);
+    return result;
+  };
+
+  it('AC-1201: con una sola peticion la partida no se reinicia', () => {
+    const { r, host } = finished();
+
+    const first = ok(requestRematch(r, host.color));
+    expect(first.agreed).toBe(false);
+    expect(r.game.status).toBe('abandoned');
+  });
+
+  it('AC-1201: cuando la piden los dos, empieza la partida nueva', () => {
+    const { r, host, guest } = finished();
+
+    requestRematch(r, host.color);
+    const second = ok(requestRematch(r, guest.color));
+
+    expect(second.agreed).toBe(true);
+    expect(r.game.status).toBe('playing');
+    expect(r.game.winner).toBeNull();
+  });
+
+  it('AC-1202: la peticion queda anotada en el asiento de quien la pidio', () => {
+    const { r, host, guest } = finished();
+
+    requestRematch(r, host.color);
+
+    expect(r.seats[host.color]?.wantsRematch).toBe(true);
+    expect(r.seats[guest.color]?.wantsRematch).toBe(false);
+  });
+
+  it('AC-1203: no se puede pedir con la partida en curso', () => {
+    const r = room();
+    const host = seatOf(takeSeat(r));
+    takeSeat(r);
+
+    expect(isRoomError(requestRematch(r, host.color))).toBe(true);
+    expect(r.game.status).toBe('playing');
+  });
+
+  it('AC-1204: no se puede pedir si el rival ya no esta sentado', () => {
+    const { r, host, guest } = finished();
+    delete r.seats[guest.color];
+
+    expect(isRoomError(requestRematch(r, host.color))).toBe(true);
+  });
+
+  it('AC-1205: al empezar la revancha se olvidan las peticiones', () => {
+    const { r, host, guest } = finished();
+
+    requestRematch(r, host.color);
+    requestRematch(r, guest.color);
+
+    for (const seat of Object.values(r.seats)) expect(seat?.wantsRematch).toBe(false);
+  });
+
+  it('AC-1206: ausentarse retira la peticion', () => {
+    const { r, host, guest } = finished();
+
+    requestRematch(r, host.color);
+    markDisconnected(r, host.color, host.session);
+    expect(r.seats[host.color]?.wantsRematch).toBe(false);
+
+    // Y la peticion del rival ya no alcanza para arrancar sin el.
+    const alone = ok(requestRematch(r, guest.color));
+    expect(alone.agreed).toBe(false);
+    expect(r.game.status).toBe('abandoned');
   });
 });

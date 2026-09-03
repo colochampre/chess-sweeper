@@ -232,6 +232,10 @@ el rival la conteste, siendo mover una de las respuestas posibles.
 - **AC-1304** No se puede ofrecer si el rival no esta sentado: no hay con quien acordar.
 - **AC-1305** Rechazar retira la oferta y se le comunica a quien ofrecio. Un "no" tiene que
   llegar: si no, no se distingue de un silencio.
+  Aceptar lo que ofrece el rival no se limita nunca: la espera de AC-1308 es para no acosar
+  con ofertas, no para impedir estar de acuerdo. Con las mismas guardas, quien acabara de
+  recibir un "no" no podria decir que si al de enfrente, que es justo el momento en que los
+  dos ya se pusieron de acuerdo.
 - **AC-1306** La oferta sigue en pie hasta que el rival la conteste, y mover es una de las
   respuestas: si el rival mueve, ha rechazado. La posicion no caduca la oferta, la contesta.
   El acuerdo viaja en CADA movimiento, no solo al ofrecer: mover contesta a la oferta del
@@ -297,8 +301,11 @@ con alguien ausente, el reloj se para y corre la ausencia.
 - **AC-1402** El reloj lo lleva el servidor. El cliente dibuja lo que le llega y nunca decide
   que se acabo el tiempo. Misma razon que las minas: lo que decide el cliente, el cliente lo
   puede mentir.
-- **AC-1403** El reloj arranca cuando se sientan los dos, no al crear la sala. Esperar a que
-  llegue un rival no puede costar tiempo.
+- **AC-1403** El reloj arranca con la primera jugada de las blancas, no al crear la sala ni
+  al sentarse el segundo jugador. Esperar a que llegue un rival no puede costar tiempo, y
+  acomodarse tampoco: entre que el segundo entra y mira el tablero pasan unos segundos que
+  no son parte de la partida. La contrapartida, asumida: las blancas pueden pensar la
+  primera jugada sin reloj.
 - **AC-1404** Al mover se descuenta lo que tardo quien movio y se le suma el incremento, si
   lo hay. Lo mide el servidor, asi que quien mueve paga su propia latencia de subida: es lo
   que hace cualquier reloj de verdad, y la alternativa seria fiarse de un cronometro que

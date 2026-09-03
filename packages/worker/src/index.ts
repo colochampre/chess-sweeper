@@ -187,20 +187,21 @@ export class Room implements DurableObject {
    */
   private nextAlarmAt(now = Date.now()): number {
     if (this.room !== null && this.room.game.status === 'playing') {
-      const absences: number[] = [];
+      const deadlines: number[] = [];
+      // El plazo de ausencia sale de `absenceMsLeft` y no de una cuenta propia. Calcularlo
+      // aparte fue justamente el fallo: sumando ABSENCE_FORFEIT_MS a `disconnectedAt` se
+      // ignora lo ya gastado en ausencias anteriores (AC-1104), asi que cada reconexion
+      // empujaba la alarma dos minutos mas alla y la cuenta del HUD llegaba a cero sin que
+      // pasara nada. Es lo que el comentario de esa funcion venia advirtiendo.
       for (const color of ['w', 'b'] as const) {
-        const seat = this.room.seats[color];
-        if (seat && !seat.connected && seat.disconnectedAt !== null) {
-          absences.push(seat.disconnectedAt);
-        }
+        const left = absenceMsLeft(this.room, color, now);
+        if (left !== null) deadlines.push(now + left);
       }
       // La bandera cae sola y en el momento (AC-1406): si toca antes que una ausencia, la
       // alarma es esa. Un Durable Object solo puede tener una, asi que manda la mas urgente.
       const flag = this.room.clock === null
         ? null
         : flagFallsAt(this.room.clock, clockRunningFor(this.room));
-      const deadlines: number[] = [];
-      if (absences.length > 0) deadlines.push(Math.min(...absences) + ABSENCE_FORFEIT_MS);
       if (flag !== null) deadlines.push(flag);
       // Un segundo de margen: al despertar el plazo tiene que estar cumplido, no justo.
       if (deadlines.length > 0) return Math.min(...deadlines) + 1_000;

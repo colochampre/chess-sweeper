@@ -152,10 +152,6 @@ export function takeSeat(
     drawAllowedFrom: null,
   };
   room.seats[color] = seat;
-  // El reloj arranca cuando estan los dos, no al crear la sala: esperar a que llegue un
-  // rival no puede costar tiempo (AC-1403). "Los dos" es presentes, no sentados: un asiento
-  // ocupado por alguien ausente no deja correr el reloj (AC-1408).
-  if (room.clock !== null && bothPresent(room)) startClock(room.clock, now);
   room.lastActivity = now;
   return seat;
 }
@@ -184,8 +180,14 @@ export function resumeSeat(room: RoomState, token: string, now = Date.now()): Se
       // partida, asi que volver no lo devuelve, solo detiene el gasto.
       if (seat.disconnectedAt !== null) seat.absenceSpentMs += now - seat.disconnectedAt;
       seat.disconnectedAt = null;
-      // Vuelven a estar los dos: el reloj sigue donde se quedo (AC-1408).
-      if (room.clock !== null && room.game.status === 'playing' && bothPresent(room)) {
+      // Vuelven a estar los dos: el reloj sigue donde se quedo (AC-1408). Solo si la
+      // partida ya arranco, porque antes de la primera jugada no corre (AC-1403).
+      if (
+        room.clock !== null &&
+        room.game.status === 'playing' &&
+        room.game.history.length > 0 &&
+        bothPresent(room)
+      ) {
         startClock(room.clock, now);
       }
       room.lastActivity = now;
@@ -211,13 +213,22 @@ export function playMove(
 ): { events: GameEvent[] } | RoomError {
   if (room.game.status !== 'playing') return { error: 'La partida ya ha terminado' };
   if (room.game.turn !== color) return { error: 'No es tu turno' };
+  // Antes de aplicar: despues ya hay una jugada en la historia y no se distinguiria.
+  const firstMove = room.game.history.length === 0;
   try {
     const result = applyMove(room.game, move);
     room.game = result.state;
     // Se cobra la jugada a quien la hizo y el reloj sigue, ya para el rival (AC-1404). Va
     // aqui, dentro de la unica puerta que modifica la partida, para que no exista un camino
     // por el que se pueda mover sin pagar el tiempo.
-    if (room.clock !== null) chargeMove(room.clock, color, now);
+    //
+    // La primera jugada de las blancas no se cobra: es la que ARRANCA el reloj (AC-1403).
+    // Y solo arranca con los dos presentes: si el rival esta ausente el reloj sigue parado
+    // (AC-1408), y `chargeMove` no cobra nada con el reloj detenido.
+    if (room.clock !== null) {
+      if (firstMove && bothPresent(room)) startClock(room.clock, now);
+      else chargeMove(room.clock, color, now);
+    }
     // Mover es contestar que no (AC-1306, regla FIDE): la oferta que tenia el rival en pie
     // se apaga aqui. La propia sobrevive al movimiento, porque en FIDE se ofrecen tablas
     // justo despues de mover.
@@ -246,10 +257,9 @@ export function rematch(room: RoomState, now = Date.now()): void {
     seat.absenceSpentMs = 0; // partida nueva, presupuesto nuevo (AC-1411)
     room.seats[seat.color] = seat;
   }
-  // Relojes a cero y en marcha si estan los dos: es una partida nueva, no la continuacion
-  // de la anterior.
+  // Relojes a cero, y parados hasta la primera jugada: es una partida nueva, no la
+  // continuacion de la anterior (AC-1411), y arranca como cualquier otra (AC-1403).
   room.clock = createClock(room.settings.timeControl ?? 'none');
-  if (room.clock !== null && bothPresent(room)) startClock(room.clock, now);
   room.lastActivity = now;
 }
 
@@ -297,10 +307,18 @@ export function offerDraw(
 
   const rival = room.seats[opponentOf(color)];
   if (!rival) return { error: 'Tu rival ya no esta en la sala' };
-  if (seat.offersDraw) return { error: 'Ya has ofrecido tablas' };
-  const left = drawMovesLeft(room, color);
-  if (left > 0) {
-    return { error: `Faltan ${left} ${left === 1 ? 'jugada' : 'jugadas'} para volver a ofrecer tablas` };
+  // Con una oferta del rival en pie, esto es ACEPTAR, no ofrecer. Y aceptar no se limita: la
+  // espera existe para no acosar con ofertas, no para impedir estar de acuerdo. Poniendole
+  // las mismas guardas, quien acabara de recibir un "no" no podria decir que si al de
+  // enfrente, que es justo el momento en que los dos ya se pusieron de acuerdo.
+  if (!rival.offersDraw) {
+    if (seat.offersDraw) return { error: 'Ya has ofrecido tablas' };
+    const left = drawMovesLeft(room, color);
+    if (left > 0) {
+      return {
+        error: `Faltan ${left} ${left === 1 ? 'jugada' : 'jugadas'} para volver a ofrecer tablas`,
+      };
+    }
   }
 
   seat.offersDraw = true;

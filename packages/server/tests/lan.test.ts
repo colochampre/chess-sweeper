@@ -490,20 +490,37 @@ describe('FR-9 la version del protocolo se comprueba', () => {
 describe('FR-14 el reloj por el cable', () => {
   const TIMED = `${CREATE}&timeControl=5%2B2`;
 
-  it('AC-1412: al sentarse los dos, el reloj llega a ambos', async () => {
+  it('AC-1403: al sentarse los dos el reloj llega, pero parado hasta la primera jugada', async () => {
     const host = connect(TIMED);
     const seated = await host.waitFor('seated');
     if (seated.t !== 'seated') return;
 
-    const guest = connect(`a=join&code=${seated.code}&timeControl=5%2B2`);
+    const guest = connect(`a=join&code=${seated.code}`);
     await guest.waitFor('seated');
 
-    // El primer `clock` del anfitrion llega con el reloj parado, porque todavia esta solo
-    // (AC-1403). El que interesa es el de cuando ya estan los dos.
+    // Llega entero y sin correr: acomodarse no puede costar tiempo.
     for (const client of [host, guest]) {
-      const clock = await client.waitFor('clock', (m) => m.t === 'clock' && m.running === 'w');
+      const clock = await client.waitFor('clock', (m) => m.t === 'clock' && m.running === null);
       expect(clock).toMatchObject({ t: 'clock', left: { w: 300_000, b: 300_000 } });
     }
+
+    host.bye();
+    guest.bye();
+  });
+
+  it('AC-1403: la primera jugada de las blancas lo pone en marcha', async () => {
+    const host = connect(TIMED);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('clock');
+
+    host.send({ t: 'move', move: { from: 1, to: 16 } });
+
+    const running = await guest.waitFor('clock', (m) => m.t === 'clock' && m.running === 'b');
+    // Esa jugada arranca el reloj: no se cobra ni suma incremento.
+    expect(running.t === 'clock' && running.left.w).toBe(300_000);
 
     host.bye();
     guest.bye();
@@ -517,14 +534,17 @@ describe('FR-14 el reloj por el cable', () => {
     await guest.waitFor('seated');
     await host.waitFor('clock');
 
+    // La primera arranca el reloj; la segunda ya se cobra.
     host.send({ t: 'move', move: { from: 1, to: 16 } });
+    await guest.waitFor('clock', (m) => m.t === 'clock' && m.running === 'b');
+    guest.send({ t: 'move', move: { from: 62, to: 47 } });
 
+    const after = await host.waitFor('clock', (m) => m.t === 'clock' && m.running === 'w');
     // Movio casi al instante, asi que el incremento le deja por encima de los 5 minutos.
-    const after = await guest.waitFor('clock', (m) => m.t === 'clock' && m.running === 'b');
-    expect(after.t === 'clock' && after.left.w).toBeGreaterThan(300_000);
-    // El del rival ya esta corriendo, asi que va por debajo del inicial, no clavado en el.
-    expect(after.t === 'clock' && after.left.b).toBeLessThanOrEqual(300_000);
-    expect(after.t === 'clock' && after.left.b).toBeGreaterThan(299_000);
+    expect(after.t === 'clock' && after.left.b).toBeGreaterThan(300_000);
+    // El propio ya esta corriendo, asi que va por debajo del inicial, no clavado en el.
+    expect(after.t === 'clock' && after.left.w).toBeLessThanOrEqual(300_000);
+    expect(after.t === 'clock' && after.left.w).toBeGreaterThan(299_000);
 
     host.bye();
     guest.bye();

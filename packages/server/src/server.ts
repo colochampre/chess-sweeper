@@ -31,8 +31,12 @@ import {
   opponentOf,
   parseIntent,
   playMove,
+  clockMsLeft,
+  clockRunningFor,
   declineDraw,
   drawMovesLeft,
+  flagFallsAt,
+  forfeitTimeout,
   offerDraw,
   requestRematch,
   resumeSeat,
@@ -91,6 +95,8 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     alive: boolean;
   }
   const sessions = new Map<WebSocket, Session>();
+  /** Temporizador de bandera por sala; ver `scheduleFlag`. */
+  const flagTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   const send = (socket: WebSocket, message: ServerMessage): void => {
     if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
@@ -160,6 +166,55 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     }
   }
 
+  /**
+   * El reloj de la sala. Se manda lo que le queda a cada uno en ESTE instante; el cliente
+   * apunta cuando lo recibio y descuenta desde ahi (AC-1412).
+   */
+  function broadcastClock(room: RoomState): void {
+    if (room.clock === null) return;
+    const running = clockRunningFor(room);
+    const at = Date.now();
+    const left = {
+      w: clockMsLeft(room.clock, 'w', running, at),
+      b: clockMsLeft(room.clock, 'b', running, at),
+    };
+    for (const color of ['w', 'b'] as const) {
+      const target = members.get(room.code)?.get(color);
+      if (target) send(target, { t: 'clock', left, running });
+    }
+  }
+
+  /**
+   * Despierta en el instante exacto en que caeria la bandera (AC-1406). El barrido periodico
+   * no sirve para esto: con el, se perderia medio minuto tarde o se moveria con un tiempo
+   * que ya no se tenia. Se reprograma en cada cosa que mueva el reloj.
+   */
+  function scheduleFlag(room: RoomState): void {
+    const pending = flagTimers.get(room.code);
+    if (pending !== undefined) clearTimeout(pending);
+    flagTimers.delete(room.code);
+    if (room.clock === null) return;
+
+    const falls = flagFallsAt(room.clock, clockRunningFor(room));
+    if (falls === null) return;
+    const timer = setTimeout(() => {
+      flagTimers.delete(room.code);
+      const out = forfeitTimeout(room);
+      if (out === null) return;
+      broadcastEvents(room, out.events);
+      broadcastClock(room);
+    }, Math.max(0, falls - Date.now()));
+    // Un temporizador pendiente no puede impedir que el proceso termine.
+    timer.unref?.();
+    flagTimers.set(room.code, timer);
+  }
+
+  /** Lo que hay que rehacer cada vez que el reloj cambia de estado. */
+  function clockChanged(room: RoomState): void {
+    broadcastClock(room);
+    scheduleFlag(room);
+  }
+
   /** Quien ha ofrecido tablas, por el mismo motivo: una oferta muda no se ve. */
   function broadcastDrawState(room: RoomState): void {
     for (const color of ['w', 'b'] as const) {
@@ -184,6 +239,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     sessions.set(socket, { room, color, session, alive: true });
     send(socket, { t: 'seated', code: room.code, color, token, view: viewFor(room, color) });
     broadcastPresence(room);
+    clockChanged(room);
   }
 
   const server = createServer(serveStatic);
@@ -266,10 +322,19 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
             return send(socket, { t: 'sync', view: viewFor(room, color) });
           }
           broadcastEvents(room, result.events);
+          // La oferta que viaja con la jugada se aplica DESPUES de ella (AC-1413). Si no se
+          // puede —cooldown, o la jugada acabo la partida— se dice y el movimiento queda:
+          // deshacerlo por una oferta seria mucho peor que no ofrecer.
+          if (message.offerDraw === true) {
+            const offered = offerDraw(room, color);
+            if (isRoomError(offered)) send(socket, { t: 'error', message: offered.error });
+            else if (offered.agreed) broadcastEvents(room, offered.events);
+          }
           // Mover contesta a la oferta del rival y desbloquea la propia (AC-1306/1308), asi
           // que el acuerdo cambia en CADA movimiento. Sin avisarlo, los botones se quedan
           // puestos y pulsar "aceptar" despues de mover vuelve a ofrecer tablas.
           broadcastDrawState(room);
+          clockChanged(room);
           return;
         }
         case 'draw': {
@@ -314,6 +379,8 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
               view: viewFor(room, c),
             });
           }
+          // Partida nueva: relojes a cero y bandera reprogramada (AC-1411).
+          clockChanged(room);
           return;
         }
         case 'leave': {
@@ -335,6 +402,9 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
         // Solo cuenta si esta conexion no habia sido ya reemplazada por otra.
         if (markDisconnected(current.room, current.color, current.session)) {
           broadcastPresence(current.room);
+          // La ausencia para el reloj (AC-1408): hay que contarlo y desprogramar la bandera,
+          // porque con el reloj parado ya no cae.
+          clockChanged(current.room);
         }
       }
       sessions.delete(socket);
@@ -358,10 +428,16 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     for (const [code, room] of rooms) {
       // Ausentarse demasiado equivale a irse: el rival no tiene que reclamar nada.
       const abandoned = forfeitAbsent(room);
-      if (abandoned) broadcastEvents(room, abandoned.events);
+      if (abandoned) {
+        broadcastEvents(room, abandoned.events);
+        clockChanged(room);
+      }
       if (isStale(room)) {
         rooms.delete(code);
         members.delete(code);
+        const timer = flagTimers.get(code);
+        if (timer !== undefined) clearTimeout(timer);
+        flagTimers.delete(code);
       }
     }
   }, SWEEP_MS);
@@ -378,6 +454,8 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     close: async () => {
       clearInterval(heartbeat);
       clearInterval(sweep);
+      for (const timer of flagTimers.values()) clearTimeout(timer);
+      flagTimers.clear();
       for (const socket of sessions.keys()) socket.terminate();
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       await new Promise<void>((resolve) => (server as Server).close(() => resolve()));

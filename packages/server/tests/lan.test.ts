@@ -486,3 +486,142 @@ describe('FR-9 la version del protocolo se comprueba', () => {
     current.bye();
   });
 });
+
+describe('FR-14 el reloj por el cable', () => {
+  const TIMED = `${CREATE}&timeControl=5%2B2`;
+
+  it('AC-1403: al sentarse los dos el reloj llega, pero parado hasta la primera jugada', async () => {
+    const host = connect(TIMED);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+
+    // Llega entero y sin correr: acomodarse no puede costar tiempo.
+    for (const client of [host, guest]) {
+      const clock = await client.waitFor('clock', (m) => m.t === 'clock' && m.running === null);
+      expect(clock).toMatchObject({ t: 'clock', left: { w: 300_000, b: 300_000 } });
+    }
+
+    host.bye();
+    guest.bye();
+  });
+
+  it('AC-1403: la primera jugada de las blancas lo pone en marcha', async () => {
+    const host = connect(TIMED);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('clock');
+
+    host.send({ t: 'move', move: { from: 1, to: 16 } });
+
+    const running = await guest.waitFor('clock', (m) => m.t === 'clock' && m.running === 'b');
+    // Esa jugada arranca el reloj: no se cobra ni suma incremento.
+    expect(running.t === 'clock' && running.left.w).toBe(300_000);
+
+    host.bye();
+    guest.bye();
+  });
+
+  it('AC-1404: tras mover, el reloj que llega ya trae el descuento y el incremento', async () => {
+    const host = connect(TIMED);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('clock');
+
+    // La primera arranca el reloj; la segunda ya se cobra.
+    host.send({ t: 'move', move: { from: 1, to: 16 } });
+    await guest.waitFor('clock', (m) => m.t === 'clock' && m.running === 'b');
+    guest.send({ t: 'move', move: { from: 62, to: 47 } });
+
+    const after = await host.waitFor('clock', (m) => m.t === 'clock' && m.running === 'w');
+    // Movio casi al instante, asi que el incremento le deja por encima de los 5 minutos.
+    expect(after.t === 'clock' && after.left.b).toBeGreaterThan(300_000);
+    // El propio ya esta corriendo, asi que va por debajo del inicial, no clavado en el.
+    expect(after.t === 'clock' && after.left.w).toBeLessThanOrEqual(300_000);
+    expect(after.t === 'clock' && after.left.w).toBeGreaterThan(299_000);
+
+    host.bye();
+    guest.bye();
+  });
+
+  it('AC-1408: al irse el rival, el reloj deja de correr para los dos', async () => {
+    const host = connect(TIMED);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('clock');
+
+    guest.bye();
+
+    const paused = await host.waitFor('clock', (m) => m.t === 'clock' && m.running === null);
+    expect(paused.t === 'clock' && paused.running).toBeNull();
+
+    host.bye();
+  });
+
+  it('AC-1401: una sala sin control de tiempo no manda reloj', async () => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+
+    expect(await notReceived(host, 'clock')).toBe(true);
+
+    host.bye();
+    guest.bye();
+  });
+});
+
+describe('FR-14 la oferta viaja con la jugada', () => {
+  it('AC-1413: la oferta llega al rival despues de aplicarse el movimiento', async () => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('opponent', (m) => m.t === 'opponent' && m.connected);
+
+    host.send({ t: 'move', move: { from: 1, to: 16 }, offerDraw: true });
+
+    // La jugada llega, y la oferta con ella: el rival la piensa en su propio turno.
+    await guest.waitFor('moved');
+    const offered = await guest.waitFor('draw', (m) => m.t === 'draw' && m.theirs);
+    expect(offered).toMatchObject({ t: 'draw', mine: false, theirs: true });
+
+    host.bye();
+    guest.bye();
+  });
+
+  it('AC-1413: si la oferta no se puede, la jugada queda igual', async () => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('opponent', (m) => m.t === 'opponent' && m.connected);
+
+    // Ofrece, el rival rechaza, y vuelve a ofrecer con su jugada antes de tiempo.
+    host.send({ t: 'draw' });
+    await guest.waitFor('draw', (m) => m.t === 'draw' && m.theirs);
+    guest.send({ t: 'draw-decline' });
+    await host.waitFor('draw', (m) => m.t === 'draw' && !m.mine);
+
+    host.send({ t: 'move', move: { from: 1, to: 16 }, offerDraw: true });
+
+    const refused = await host.waitFor('error');
+    expect(refused.t === 'error' && refused.message).toMatch(/jugadas/i);
+    // Deshacer el movimiento por una oferta rechazada seria mucho peor que no ofrecer.
+    await guest.waitFor('moved');
+
+    host.bye();
+    guest.bye();
+  });
+});

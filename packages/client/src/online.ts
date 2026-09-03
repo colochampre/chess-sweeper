@@ -3,6 +3,7 @@ import {
   WS_PATH,
   intentToQuery,
   type ClientMessage,
+  type Color,
   type ConnectIntent,
   type GameStatus,
   type ServerMessage,
@@ -177,7 +178,11 @@ export class OnlineClient {
 /** Lo que el boton de tablas ofrece hacer ahora mismo. */
 export interface DrawButton {
   label: string;
-  action: 'offer' | 'accept';
+  /**
+   * `arm` deja la oferta preparada para viajar con la jugada; `disarm` la cancela antes de
+   * mover. `offer` la manda suelta y `accept` contesta a la del rival.
+   */
+  action: 'offer' | 'accept' | 'arm' | 'disarm';
   disabled: boolean;
 }
 
@@ -195,17 +200,66 @@ export function drawButton(offer: {
   mine: boolean;
   theirs: boolean;
   movesLeft: number;
+  yourTurn: boolean;
+  armed: boolean;
 }): DrawButton | null {
   // Contra la maquina no hay con quien acordar, y en hotseat los dos jugadores ya comparten
   // la mesa. Y con la partida terminada lo que se ofrece es la revancha, no las tablas.
   if (offer.mode !== 'online' || offer.status !== 'playing') return null;
-  // Deber jugadas antes de volver a ofrecer no impide decir que si: son cosas distintas.
+  // Aceptar es una respuesta, no una oferta: no espera a ninguna jugada. Y deber jugadas
+  // antes de volver a ofrecer no impide decir que si: son cosas distintas.
   if (offer.theirs) return { label: 'Aceptar tablas', action: 'accept', disabled: false };
   if (offer.mine) return { label: 'Tablas ofrecidas', action: 'offer', disabled: true };
+  if (offer.armed) {
+    return { label: 'Tablas con tu jugada', action: 'disarm', disabled: false };
+  }
   // Un boton que se apaga sin explicarse no se distingue de uno roto: dice lo que falta.
   if (offer.movesLeft > 0) {
     const unit = offer.movesLeft === 1 ? 'jugada' : 'jugadas';
     return { label: `Tablas en ${offer.movesLeft} ${unit}`, action: 'offer', disabled: true };
   }
+  // Secuencia FIDE: mover, ofrecer, apretar el reloj. En tu turno la oferta espera a tu
+  // jugada para caer en el tiempo del rival (AC-1413); fuera de turno se manda suelta,
+  // que FIDE tambien permite.
+  if (offer.yourTurn) {
+    return { label: 'Ofrecer con tu jugada', action: 'arm', disabled: false };
+  }
   return { label: 'Ofrecer tablas', action: 'offer', disabled: false };
+}
+
+/** Lo ultimo que dijo el servidor del reloj, y cuando lo dijo. */
+export interface ClockView {
+  left: Record<Color, number>;
+  running: Color | null;
+  /** Instante LOCAL en que llego. No se usa la hora del servidor: no tienen por que coincidir. */
+  receivedAt: number;
+}
+
+/**
+ * Lo que le queda a `color` ahora mismo, segun lo ultimo que dijo el servidor.
+ *
+ * El cliente no lleva su propia cuenta (AC-1412): descuenta desde el dato recibido, asi que
+ * cada mensaje del servidor lo vuelve a poner en hora y no puede irse acumulando deriva.
+ * Y no baja de cero: quien declara el final es el servidor (AC-1402), la pantalla solo
+ * espera con el cero puesto.
+ */
+export function clockRemaining(view: ClockView, color: Color, now: number): number {
+  const consumed = color === view.running ? now - view.receivedAt : 0;
+  return Math.max(0, view.left[color] - consumed);
+}
+
+/**
+ * `M:SS`, y con decimas por debajo de diez segundos, que es cuando importan.
+ *
+ * Las decimas se formatean siempre con un decimal: sin eso, 5 segundos clavados saldrian
+ * "0:05" y 9,4 saldrian "0:09.4", y el reloj cambiaria de forma al bajar. En cero se vuelve
+ * a `0:00`, porque ahi ya no queda nada que medir.
+ */
+export function formatClock(ms: number): string {
+  const total = Math.max(0, ms);
+  const minutes = Math.floor(total / 60_000);
+  const seconds = (total % 60_000) / 1000;
+  if (total === 0) return '0:00';
+  if (total < 10_000) return `${minutes}:0${(Math.floor(seconds * 10) / 10).toFixed(1)}`;
+  return `${minutes}:${String(Math.floor(seconds)).padStart(2, '0')}`;
 }

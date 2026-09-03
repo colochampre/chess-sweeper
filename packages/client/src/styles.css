@@ -104,7 +104,7 @@ button.danger:hover:not(:disabled) {
 .options {
   display: grid;
   gap: 0.6rem;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 }
 .options.row {
   grid-template-columns: repeat(3, 1fr);
@@ -645,4 +645,37 @@ button.danger:hover:not(:disabled) {
   background: #1b1a18;
   padding: 0.1rem 0.35rem;
   border-radius: 3px;
+}
+
+/* ---------- Reloj ---------- */
+
+.clocks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.clock {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.clock strong {
+  font-size: 1.35rem;
+  letter-spacing: 0.02em;
+}
+/* El que corre se distingue de un vistazo: sin esto hay que leer los dos para saber. */
+.clock.ticking {
+  border-color: var(--accent);
+  background: rgba(127, 166, 80, 0.12);
+}
+.clock.low strong {
+  color: var(--danger);
+}
+.clocks .hint {
+  text-align: center;
+  font-size: 0.72rem;
 }

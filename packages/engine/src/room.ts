@@ -9,11 +9,19 @@
  * Aqui es donde viven las minas. Nada de lo que sale de este modulo hacia un cliente las
  * incluye: para eso esta `viewFor`.
  */
-import { applyMove, createGame, toView } from './game.js';
+import { applyMove, canDeliverMate, createGame, toView } from './game.js';
 import { configFor } from './config.js';
 import { randomSeed } from './rng.js';
 import type { RoomSettings } from './protocol.js';
 import type { Color, GameEvent, GameState, Move, PlayerView } from './types.js';
+import {
+  chargeMove,
+  createClock,
+  flaggedColor,
+  pauseClock,
+  startClock,
+  type ClockState,
+} from './clock.js';
 
 export interface Seat {
   color: Color;
@@ -32,6 +40,13 @@ export interface Seat {
    * distinguir una caida pasajera de un abandono: ver `forfeitAbsent`.
    */
   disconnectedAt: number | null;
+  /**
+   * Ausencia ya gastada en esta partida, sumando todas las veces. El presupuesto es por
+   * partida y no por desconexion (AC-1104): como la ausencia para el reloj (AC-1408),
+   * regalarlo entero cada vez convertiria desenchufarse en dos minutos de analisis gratis
+   * por jugada.
+   */
+  absenceSpentMs: number;
   /** Ha pedido la revancha. Se olvida al empezarla y al ausentarse. */
   wantsRematch: boolean;
   /**
@@ -53,6 +68,8 @@ export interface RoomState {
   /** VERDAD OCULTA: contiene el campo de minas. */
   game: GameState;
   seats: Partial<Record<Color, Seat>>;
+  /** Reloj de la partida, o `null` si la sala se creo sin control de tiempo. */
+  clock: ClockState | null;
   createdAt: number;
   lastActivity: number;
 }
@@ -98,6 +115,7 @@ export function createRoom(code: string, settings: RoomSettings, now = Date.now(
     settings,
     game: newGame(settings),
     seats: {},
+    clock: createClock(settings.timeControl ?? 'none'),
     createdAt: now,
     lastActivity: now,
   };
@@ -128,6 +146,7 @@ export function takeSeat(
     connected: true,
     session: newToken(),
     disconnectedAt: null,
+    absenceSpentMs: 0,
     wantsRematch: false,
     offersDraw: false,
     drawAllowedFrom: null,
@@ -137,19 +156,50 @@ export function takeSeat(
   return seat;
 }
 
+/**
+ * De quien es el reloj ahora mismo, o `null` si no corre. Lo decide la sala porque es la
+ * unica que sabe de quien es el turno y si estan los dos delante; el modulo del reloj solo
+ * cuenta. Sin esto, cada transporte tendria su propia idea de cuando corre el tiempo.
+ */
+export function clockRunningFor(room: RoomState): Color | null {
+  if (room.clock === null || room.game.status !== 'playing') return null;
+  // Parado no corre nadie. Devolver el turno igual seria inofensivo para el motor, porque
+  // `runningSince` en null no consume, pero al cliente le diria que descuente de un reloj
+  // que el servidor tiene detenido: justo la deriva que AC-1412 evita.
+  if (room.clock.runningSince === null) return null;
+  return room.game.turn;
+}
+
 /** Recupera un asiento con su credencial tras una desconexion. */
 export function resumeSeat(room: RoomState, token: string, now = Date.now()): Seat | RoomError {
   for (const seat of Object.values(room.seats)) {
     if (seat && seat.token === token) {
       seat.connected = true;
       seat.session = newToken(); // conexion nueva: la anterior deja de mandar
-      seat.disconnectedAt = null; // ha vuelto: el plazo de abandono deja de correr
+      // El rato que estuvo fuera se apunta antes de olvidarlo: el presupuesto es por
+      // partida, asi que volver no lo devuelve, solo detiene el gasto.
+      if (seat.disconnectedAt !== null) seat.absenceSpentMs += now - seat.disconnectedAt;
+      seat.disconnectedAt = null;
+      // Vuelven a estar los dos: el reloj sigue donde se quedo (AC-1408). Solo si la
+      // partida ya arranco, porque antes de la primera jugada no corre (AC-1403).
+      if (
+        room.clock !== null &&
+        room.game.status === 'playing' &&
+        room.game.history.length > 0 &&
+        bothPresent(room)
+      ) {
+        startClock(room.clock, now);
+      }
       room.lastActivity = now;
       return seat;
     }
   }
   return { error: 'Ese asiento no es tuyo' };
 }
+
+/** Los dos asientos ocupados y conectados: es cuando puede correr el reloj. */
+const bothPresent = (room: RoomState): boolean =>
+  (['w', 'b'] as const).every((c) => room.seats[c]?.connected === true);
 
 /**
  * Unica puerta de entrada para modificar la partida. Valida con el mismo `applyMove` del
@@ -163,9 +213,22 @@ export function playMove(
 ): { events: GameEvent[] } | RoomError {
   if (room.game.status !== 'playing') return { error: 'La partida ya ha terminado' };
   if (room.game.turn !== color) return { error: 'No es tu turno' };
+  // Antes de aplicar: despues ya hay una jugada en la historia y no se distinguiria.
+  const firstMove = room.game.history.length === 0;
   try {
     const result = applyMove(room.game, move);
     room.game = result.state;
+    // Se cobra la jugada a quien la hizo y el reloj sigue, ya para el rival (AC-1404). Va
+    // aqui, dentro de la unica puerta que modifica la partida, para que no exista un camino
+    // por el que se pueda mover sin pagar el tiempo.
+    //
+    // La primera jugada de las blancas no se cobra: es la que ARRANCA el reloj (AC-1403).
+    // Y solo arranca con los dos presentes: si el rival esta ausente el reloj sigue parado
+    // (AC-1408), y `chargeMove` no cobra nada con el reloj detenido.
+    if (room.clock !== null) {
+      if (firstMove && bothPresent(room)) startClock(room.clock, now);
+      else chargeMove(room.clock, color, now);
+    }
     // Mover es contestar que no (AC-1306, regla FIDE): la oferta que tenia el rival en pie
     // se apaga aqui. La propia sobrevive al movimiento, porque en FIDE se ofrecen tablas
     // justo despues de mover.
@@ -191,8 +254,12 @@ export function rematch(room: RoomState, now = Date.now()): void {
     seat.wantsRematch = false; // la siguiente revancha hay que volver a acordarla
     seat.offersDraw = false; // partida nueva, tablero nuevo: la oferta anterior no significa nada
     seat.drawAllowedFrom = null;
+    seat.absenceSpentMs = 0; // partida nueva, presupuesto nuevo (AC-1411)
     room.seats[seat.color] = seat;
   }
+  // Relojes a cero, y parados hasta la primera jugada: es una partida nueva, no la
+  // continuacion de la anterior (AC-1411), y arranca como cualquier otra (AC-1403).
+  room.clock = createClock(room.settings.timeControl ?? 'none');
   room.lastActivity = now;
 }
 
@@ -240,10 +307,18 @@ export function offerDraw(
 
   const rival = room.seats[opponentOf(color)];
   if (!rival) return { error: 'Tu rival ya no esta en la sala' };
-  if (seat.offersDraw) return { error: 'Ya has ofrecido tablas' };
-  const left = drawMovesLeft(room, color);
-  if (left > 0) {
-    return { error: `Faltan ${left} ${left === 1 ? 'jugada' : 'jugadas'} para volver a ofrecer tablas` };
+  // Con una oferta del rival en pie, esto es ACEPTAR, no ofrecer. Y aceptar no se limita: la
+  // espera existe para no acosar con ofertas, no para impedir estar de acuerdo. Poniendole
+  // las mismas guardas, quien acabara de recibir un "no" no podria decir que si al de
+  // enfrente, que es justo el momento en que los dos ya se pusieron de acuerdo.
+  if (!rival.offersDraw) {
+    if (seat.offersDraw) return { error: 'Ya has ofrecido tablas' };
+    const left = drawMovesLeft(room, color);
+    if (left > 0) {
+      return {
+        error: `Faltan ${left} ${left === 1 ? 'jugada' : 'jugadas'} para volver a ofrecer tablas`,
+      };
+    }
   }
 
   seat.offersDraw = true;
@@ -328,6 +403,9 @@ export function markDisconnected(
 ): boolean {
   const seat = room.seats[color];
   if (!seat || seat.session !== session) return false;
+  // El reloj se para antes de tocar el asiento, para cobrarle a quien corria lo que llevaba
+  // consumido hasta este instante y no un milisegundo mas (AC-1408).
+  if (room.clock !== null) pauseClock(room.clock, clockRunningFor(room), now);
   seat.connected = false;
   seat.disconnectedAt = now;
   // Una revancha no puede arrancar con alguien que ya no esta delante.
@@ -389,6 +467,38 @@ export function forfeitAbsent(
 }
 
 /**
+ * Da por perdida la partida de quien se quedo sin tiempo. La llaman los dos transportes
+ * desde su propio reloj, de modo que la bandera cae sola y el rival no reclama nada
+ * (AC-1405/1406), igual que `forfeitAbsent` con la ausencia.
+ */
+export function forfeitTimeout(
+  room: RoomState,
+  now = Date.now(),
+): { events: GameEvent[] } | null {
+  if (room.clock === null || room.game.status !== 'playing') return null;
+  const flagged = flaggedColor(room.clock, clockRunningFor(room), now);
+  if (flagged === null) return null;
+
+  const rival = opponentOf(flagged);
+  room.clock.left[flagged] = 0;
+  room.clock.runningSince = null;
+  // Ganar por tiempo exige poder ganar tambien sobre el tablero. Con el rey solo no se da
+  // mate ni con todo el tiempo del mundo, asi que son tablas (AC-1407). Aqui el caso no es
+  // una rareza de reglamento: el material lo borran las explosiones.
+  const winner = canDeliverMate(room.game, rival) ? rival : null;
+  room.game.status = winner === null ? 'draw' : 'timeout';
+  room.game.winner = winner;
+  room.game.endReason = winner === null ? 'insufficient-material' : 'timeout';
+  room.lastActivity = now;
+  // Mismo evento `end` que cualquier otro final (AC-1107).
+  return {
+    events: [
+      { type: 'end', status: room.game.status, winner, reason: room.game.endReason },
+    ],
+  };
+}
+
+/**
  * Cuanto le queda a `color` antes de perder por ausencia, o `null` si no corre ningun plazo
  * (esta presente, la partida termino, o no hay rival a quien dar la victoria).
  *
@@ -406,7 +516,10 @@ export function absenceMsLeft(
   if (!seat || seat.connected || seat.disconnectedAt === null) return null;
   // Sin rival sentado no hay a quien dar la victoria: de esa sala se ocupa `isStale`.
   if (!room.seats[opponentOf(color)]) return null;
-  return Math.max(0, seat.disconnectedAt + ABSENCE_FORFEIT_MS - now);
+  // Lo gastado en ausencias anteriores cuenta: el presupuesto es de la partida, no de esta
+  // desconexion. Ver AC-1104.
+  const spent = seat.absenceSpentMs + (now - seat.disconnectedAt);
+  return Math.max(0, ABSENCE_FORFEIT_MS - spent);
 }
 
 export const opponentOf = (color: Color): Color => (color === 'w' ? 'b' : 'w');

@@ -6,13 +6,14 @@
  * y solo envia `PlayerView`, de modo que ningun cliente puede leer donde estan las minas.
  */
 import type { Color, Difficulty, GameEvent, Move, PlayerView } from './types.js';
+import { isTimeControl, type TimeControl } from './clock.js';
 
 /**
  * Version del formato del cable. Viaja en la URL de la conexion y el servidor solo acepta la
  * suya: si fuera solo un numero documentado, un cliente viejo contra un servidor nuevo no se
  * rechazaria, se rompería raro. Se sube cada vez que cambian `ClientMessage` o `ServerMessage`.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /** Parametro de la query donde viaja la version. */
 export const PROTOCOL_PARAM = 'v';
@@ -32,6 +33,8 @@ export interface RoomSettings {
   boardSize: number;
   /** Color que quiere el anfitrion; 'random' lo decide el servidor. */
   hostColor: Color | 'random';
+  /** Control de tiempo. Sin el se juega sin reloj, que es lo que hacian todas las salas. */
+  timeControl?: TimeControl;
 }
 
 /**
@@ -46,7 +49,12 @@ export type ConnectIntent =
 
 /** Mensajes que se mandan una vez sentado en la sala. */
 export type ClientMessage =
-  | { t: 'move'; move: Move }
+  /**
+   * Un movimiento, y opcionalmente una oferta de tablas que viaja con el. La oferta se
+   * aplica DESPUES del movimiento, que es la secuencia de FIDE —mover, ofrecer, apretar el
+   * reloj— y lo que hace que el rival la piense con su tiempo (AC-1413).
+   */
+  | { t: 'move'; move: Move; offerDraw?: boolean }
   | { t: 'rematch' }
   /** Ofrecer tablas y aceptarlas son el mismo mensaje: se acuerdan cuando lo mandan los dos. */
   | { t: 'draw' }
@@ -70,6 +78,13 @@ export type ServerMessage =
    * la espera que ve el jugador y la que aplica el servidor no puedan discrepar.
    */
   | { t: 'draw'; mine: boolean; theirs: boolean; movesLeft: number }
+  /**
+   * Estado del reloj: lo que le queda a cada uno EN EL INSTANTE DE MANDARLO, y de quien
+   * corre (`null` si esta parado). El cliente apunta cuando lo recibio y descuenta desde
+   * ahi (AC-1412); no viaja una marca de tiempo del servidor porque los relojes de las dos
+   * maquinas no tienen por que coincidir.
+   */
+  | { t: 'clock'; left: Record<Color, number>; running: Color | null }
   | { t: 'error'; message: string };
 
 /**
@@ -119,7 +134,10 @@ export function parseIntent(params: URLSearchParams): ConnectIntent | null {
     if (difficulty !== 'easy' && difficulty !== 'normal' && difficulty !== 'hard') return null;
     if (hostColor !== 'w' && hostColor !== 'b' && hostColor !== 'random') return null;
     if (!Number.isInteger(boardSize) || boardSize < 4 || boardSize > 16) return null;
-    return { a: 'create', difficulty, boardSize, hostColor };
+    // Sin control de tiempo se juega sin reloj, que es lo que hacian todas las salas.
+    const timeControl = params.get('timeControl') ?? 'none';
+    if (!isTimeControl(timeControl)) return null;
+    return { a: 'create', difficulty, boardSize, hostColor, timeControl };
   }
 
   const code = normalizeRoomCode(params.get('code') ?? '');

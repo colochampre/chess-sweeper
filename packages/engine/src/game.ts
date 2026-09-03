@@ -107,6 +107,24 @@ export function computeCastlingRights(state: GameState): CastlingRights {
   return rights;
 }
 
+/**
+ * Si `color` conserva material con el que sea posible dar mate. Un rey solo no puede, y un
+ * rey con una sola pieza menor tampoco; con dos ya hay posiciones de mate.
+ *
+ * Es por color, a diferencia de `insufficientMaterial`, que mira el tablero entero: al
+ * caerse una bandera la pregunta no es si alguien puede ganar, sino si puede el que todavia
+ * tiene tiempo. Ver AC-1407.
+ */
+export function canDeliverMate(state: GameState, color: Color): boolean {
+  let minors = 0;
+  for (const p of state.board) {
+    if (p === null || p.color !== color || p.type === 'k') continue;
+    if (p.type === 'n' || p.type === 'b') minors++;
+    else return true; // peon, torre o dama: con eso se da mate
+  }
+  return minors >= 2;
+}
+
 /** Solo reyes, o rey contra rey y una pieza menor: nadie puede dar mate. */
 function insufficientMaterial(state: GameState): boolean {
   let minors = 0;

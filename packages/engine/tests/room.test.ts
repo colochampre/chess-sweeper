@@ -6,10 +6,13 @@ import {
   PROTOCOL_VERSION,
   ROOM_TTL_MS,
   DRAW_COOLDOWN_MOVES,
+  clockMsLeft,
+  clockRunningFor,
   createRoom,
   declineDraw,
   drawMovesLeft,
   forfeitAbsent,
+  forfeitTimeout,
   generateRoomCode,
   intentToQuery,
   isProtocolCurrent,
@@ -27,6 +30,7 @@ import {
   takeSeat,
   viewFor,
   type RoomError,
+  type RoomState,
   type RoomSettings,
   type Seat,
 } from '@cm/engine';
@@ -170,7 +174,7 @@ describe('FR-3 reconexion', () => {
 describe('FR-5 parametros de conexion', () => {
   it('AC-501: ida y vuelta de los tres tipos de intencion', () => {
     const intents = [
-      { a: 'create', difficulty: 'hard', boardSize: 10, hostColor: 'random' },
+      { a: 'create', difficulty: 'hard', boardSize: 10, hostColor: 'random', timeControl: '10+5' },
       { a: 'join', code: 'ABC234' },
       { a: 'resume', code: 'ABC234', token: '2f1c9a7e-3b4d-4c5e-8f90-1a2b3c4d5e6f' },
     ] as const;
@@ -548,6 +552,23 @@ describe('FR-13 ofrecer tablas', () => {
     expect(isRoomError(offerDraw(r, host.color))).toBe(false);
   });
 
+  it('AC-1305: la espera propia no impide aceptar lo que ofrece el rival', () => {
+    const { r, host, guest } = playing();
+
+    // A host le queda espera pendiente...
+    offerDraw(r, host.color);
+    declineDraw(r, guest.color);
+    expect(drawMovesLeft(r, host.color)).toBeGreaterThan(0);
+
+    // ...y aun asi puede decir que si. La espera es para no acosar con ofertas, no para
+    // impedir estar de acuerdo: aceptar es una respuesta, no una oferta nueva.
+    offerDraw(r, guest.color);
+    const accepted = ok(offerDraw(r, host.color));
+
+    expect(accepted.agreed).toBe(true);
+    expect(r.game.status).toBe('draw');
+  });
+
   it('AC-1308: la primera propuesta no espera nada', () => {
     const { r, host } = playing();
 
@@ -622,6 +643,264 @@ describe('FR-13 ofrecer tablas', () => {
     for (const seat of Object.values(r.seats)) {
       expect(seat?.offersDraw).toBe(false);
       expect(seat?.drawAllowedFrom).toBeNull();
+    }
+  });
+});
+
+describe('FR-14 el reloj en la sala', () => {
+  const T0 = 1_000_000;
+  const timed = (control = '5+2') =>
+    createRoom(generateRoomCode(), { ...SETTINGS, timeControl: control as never });
+
+  const ok = <T>(result: T | RoomError): T => {
+    if (isRoomError(result)) throw new Error(`resultado inesperado: ${result.error}`);
+    return result;
+  };
+
+  /** Sala con los dos sentados, sin minas y con la primera jugada ya hecha en `T0`. */
+  const started = (control = '5+2') => {
+    const r = timed(control);
+    takeSeat(r);
+    takeSeat(r);
+    r.game.mines.fill(false);
+    ok(playMove(r, 'w', { from: 1, to: 16 }, T0));
+    return r;
+  };
+
+  it('AC-1401: sin control de tiempo la sala no tiene reloj y todo sigue igual', () => {
+    const r = createRoom(generateRoomCode(), SETTINGS);
+
+    expect(r.clock).toBeNull();
+    // Y se puede jugar: el reloj es opcional, no un requisito nuevo.
+    takeSeat(r);
+    takeSeat(r);
+    expect(isRoomError(playMove(r, 'w', { from: 12, to: 28 }))).toBe(false);
+  });
+
+  it('AC-1403: el reloj no arranca al crear la sala ni al sentarse los dos', () => {
+    const r = timed();
+    expect(r.clock?.runningSince).toBeNull();
+
+    takeSeat(r);
+    expect(r.clock?.runningSince).toBeNull();
+
+    // Entre que el segundo entra y mira el tablero pasan unos segundos que no son partida.
+    takeSeat(r);
+    expect(r.clock?.runningSince).toBeNull();
+  });
+
+  it('AC-1403: arranca con la primera jugada de las blancas, y esa no se cobra', () => {
+    const r = timed();
+    takeSeat(r);
+    takeSeat(r);
+    r.game.mines.fill(false);
+
+    ok(playMove(r, 'w', { from: 1, to: 16 }, T0));
+
+    expect(r.clock!.runningSince).toBe(T0);
+    // Es la jugada que ARRANCA el reloj: no se le descuenta ni se le suma incremento.
+    expect(r.clock!.left).toEqual({ w: 5 * 60_000, b: 5 * 60_000 });
+  });
+
+  it('AC-1403: con el rival ausente, mover no arranca el reloj', () => {
+    const r = timed();
+    takeSeat(r);
+    takeSeat(r);
+    r.game.mines.fill(false);
+    const black = r.seats.b!;
+    markDisconnected(r, 'b', black.session, T0);
+
+    ok(playMove(r, 'w', { from: 1, to: 16 }, T0 + 1_000));
+
+    // No puede empezar a correrle el tiempo a alguien que no esta delante (AC-1408).
+    expect(r.clock!.runningSince).toBeNull();
+  });
+
+  it('AC-1404: mover descuenta del que movio y deja corriendo al rival', () => {
+    const r = started();
+
+    ok(playMove(r, 'b', { from: 62, to: 47 }, T0 + 10_000));
+
+    expect(r.clock!.left.b).toBe(5 * 60_000 - 10_000 + 2_000);
+    expect(r.clock!.left.w).toBe(5 * 60_000);
+  });
+
+  it('AC-1405: quedarse sin tiempo termina la partida y gana el rival', () => {
+    const r = started();
+
+    const out = forfeitTimeout(r, T0 + 6 * 60_000);
+
+    expect(out).not.toBeNull();
+    expect(r.game.status).toBe('timeout');
+    expect(r.game.winner).toBe('w'); // corria el reloj de las negras
+    expect(r.game.endReason).toBe('timeout');
+    // Mismo evento `end` que cualquier otro final (AC-1107).
+    expect(out?.events).toEqual([
+      { type: 'end', status: 'timeout', winner: 'w', reason: 'timeout' },
+    ]);
+  });
+
+  it('AC-1407: si al que le queda tiempo no le da el material, son tablas', () => {
+    const r = started();
+    // A las blancas les queda el rey solo: con eso no se da mate ni con todo el tiempo del
+    // mundo. Aqui no es una rareza de reglamento, el material lo borran las explosiones.
+    r.game.board = r.game.board.map((p) =>
+      p === null || p.type === 'k' || p.color === 'b' ? p : null,
+    );
+
+    const out = forfeitTimeout(r, T0 + 6 * 60_000);
+
+    expect(r.game.status).toBe('draw');
+    expect(r.game.winner).toBeNull();
+    expect(r.game.endReason).toBe('insufficient-material');
+    expect(out?.events).toEqual([
+      { type: 'end', status: 'draw', winner: null, reason: 'insufficient-material' },
+    ]);
+  });
+
+  it('AC-1407: un alfil suelto tampoco alcanza, dos piezas menores si', () => {
+    const bare = (r: RoomState, keep: number[]) => {
+      r.game.board = r.game.board.map((p, sq) =>
+        p === null || p.type === 'k' || p.color === 'b' || keep.includes(sq) ? p : null,
+      );
+    };
+    const loneBishop = started();
+    bare(loneBishop, [2]); // un alfil blanco
+    forfeitTimeout(loneBishop, T0 + 6 * 60_000);
+    expect(loneBishop.game.winner).toBeNull();
+
+    const twoMinors = started();
+    bare(twoMinors, [2, 5]); // los dos alfiles blancos
+    forfeitTimeout(twoMinors, T0 + 6 * 60_000);
+    expect(twoMinors.game.winner).toBe('w');
+  });
+
+  it('AC-1405: con tiempo de sobra no termina nada', () => {
+    const r = started();
+
+    expect(forfeitTimeout(r, T0 + 1_000)).toBeNull();
+    expect(r.game.status).toBe('playing');
+  });
+
+  it('AC-1405: una sala sin reloj nunca pierde por tiempo', () => {
+    const r = createRoom(generateRoomCode(), SETTINGS);
+    takeSeat(r);
+    takeSeat(r);
+
+    expect(forfeitTimeout(r, Date.now() + 999 * 60_000)).toBeNull();
+    expect(r.game.status).toBe('playing');
+  });
+});
+
+describe('FR-14 la ausencia para el reloj', () => {
+  const T0 = 1_000_000;
+
+  const ok = <T>(result: T | RoomError): T => {
+    if (isRoomError(result)) throw new Error(`resultado inesperado: ${result.error}`);
+    return result;
+  };
+
+  /**
+   * Sala con reloj SIN incremento y con las dos primeras jugadas hechas en `T0`, de modo que
+   * el reloj de las blancas corre desde ese instante y no hay incrementos de por medio.
+   */
+  const timed = () => {
+    const r = createRoom(generateRoomCode(), { ...SETTINGS, timeControl: '5+0' as never });
+    const host = seatOf(takeSeat(r));
+    const guest = seatOf(takeSeat(r));
+    r.game.mines.fill(false);
+    ok(playMove(r, 'w', { from: 1, to: 16 }, T0));
+    ok(playMove(r, 'b', { from: 62, to: 47 }, T0));
+    return { r, host, guest, t0: T0 };
+  };
+
+  it('AC-1408: al ausentarse alguien el reloj se para, y no corre el tiempo de nadie', () => {
+    const { r, host, t0 } = timed();
+
+    markDisconnected(r, host.color, host.session, t0 + 10_000);
+
+    expect(r.clock!.runningSince).toBeNull();
+    // Da igual cuanto pase: que se caiga la conexion de uno no puede costarle la partida
+    // al otro, ni gastarle el reloj al que se cayo.
+    expect(clockMsLeft(r.clock!, 'w', clockRunningFor(r), t0 + 999_000)).toBe(
+      5 * 60_000 - 10_000,
+    );
+    expect(clockMsLeft(r.clock!, 'b', clockRunningFor(r), t0 + 999_000)).toBe(5 * 60_000);
+  });
+
+  it('AC-1408: lo consumido antes de la caida se cobra, parar no es deshacer', () => {
+    const { r, host, t0 } = timed();
+
+    markDisconnected(r, host.color, host.session, t0 + 30_000);
+
+    expect(r.clock!.left.w).toBe(5 * 60_000 - 30_000);
+  });
+
+  it('AC-1408: al volver, el reloj se reanuda', () => {
+    const { r, host, t0 } = timed();
+    markDisconnected(r, host.color, host.session, t0 + 10_000);
+
+    resumeSeat(r, host.token, t0 + 40_000);
+
+    expect(r.clock!.runningSince).toBe(t0 + 40_000);
+    // Y no se le cobra el rato que estuvo fuera.
+    expect(clockMsLeft(r.clock!, 'w', clockRunningFor(r), t0 + 40_000)).toBe(5 * 60_000 - 10_000);
+  });
+
+  it('AC-1410: al reconectar el reloj vuelve tal cual, sin regalar ni cobrar de mas', () => {
+    const { r, host, t0 } = timed();
+    markDisconnected(r, host.color, host.session, t0 + 30_000);
+    const frozen = { ...r.clock!.left };
+
+    const back = resumeSeat(r, host.token, t0 + 90_000);
+    if (isRoomError(back)) throw new Error(back.error);
+
+    expect(r.clock!.left).toEqual(frozen);
+    expect(clockMsLeft(r.clock!, 'w', clockRunningFor(r), t0 + 90_000)).toBe(5 * 60_000 - 30_000);
+  });
+
+  it('AC-1409: el presupuesto de ausencia es por partida y se acumula', () => {
+    const { r, host, t0 } = timed();
+
+    // Primera ausencia: un minuto.
+    markDisconnected(r, host.color, host.session, t0);
+    resumeSeat(r, host.token, t0 + 60_000);
+
+    // La segunda no empieza de cero: quedan los otros 60 segundos, no 2 minutos.
+    const seat = r.seats[host.color]!;
+    markDisconnected(r, host.color, seat.session, t0 + 70_000);
+    expect(absenceMsLeft(r, host.color, t0 + 70_000)).toBe(ABSENCE_FORFEIT_MS - 60_000);
+  });
+
+  it('AC-1409: agotado el presupuesto entre varias ausencias, gana el rival', () => {
+    const { r, host, guest, t0 } = timed();
+
+    markDisconnected(r, host.color, host.session, t0);
+    resumeSeat(r, host.token, t0 + 60_000);
+    const seat = r.seats[host.color]!;
+    markDisconnected(r, host.color, seat.session, t0 + 70_000);
+
+    // Sin acumular, desenchufarse en cada jugada dificil daria dos minutos gratis cada vez.
+    const out = forfeitAbsent(r, t0 + 70_000 + 60_001);
+    expect(out).not.toBeNull();
+    expect(r.game.winner).toBe(guest.color);
+    expect(r.game.endReason).toBe('abandoned');
+  });
+
+  it('AC-1411: la revancha reinicia los relojes y los presupuestos', () => {
+    const { r, host, t0 } = timed();
+    markDisconnected(r, host.color, host.session, t0);
+    resumeSeat(r, host.token, t0 + 60_000);
+    r.game.status = 'checkmate';
+
+    rematch(r, t0 + 70_000);
+
+    expect(r.clock!.left).toEqual({ w: 5 * 60_000, b: 5 * 60_000 });
+    // Parado hasta la primera jugada de la partida nueva (AC-1403).
+    expect(r.clock!.runningSince).toBeNull();
+    for (const seat of Object.values(r.seats)) {
+      expect(absenceMsLeft(r, seat!.color, t0 + 70_000)).toBeNull();
+      expect(seat!.absenceSpentMs).toBe(0);
     }
   });
 });

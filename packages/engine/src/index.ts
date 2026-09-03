@@ -12,3 +12,4 @@ export * from './game.js';
 export * from './protocol.js';
 export * from './room.js';
 export * from './origin.js';
+export * from './clock.js';

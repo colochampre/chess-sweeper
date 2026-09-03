@@ -1,4 +1,5 @@
 {
   "_": "Huella de lo que viaja por el cable, por version de protocolo. La calcula y comprueba protocol.test.ts (AC-504). Al cambiar ClientMessage, ServerMessage o ConnectIntent -o cualquier tipo que arrastren-, sube PROTOCOL_VERSION y anade aqui la entrada nueva que indique el test. Las versiones ya publicadas no se tocan: pisarlas dejaria entrar a clientes que hablan otro idioma.",
-  "3": "4cc9694782b32488"
+  "3": "4cc9694782b32488",
+  "4": "b7c36af3bcdb4cdc"
 }

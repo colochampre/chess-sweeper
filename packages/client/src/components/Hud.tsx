@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Color, EndReason, PieceType } from '@cm/engine';
 import { MINE_SRC, PIECE_VALUE, pieceSrc } from '../theme.js';
 import { useGame } from '../store.js';
-import { drawButton } from '../online.js';
+import { clockRemaining, drawButton, formatClock, type ClockView } from '../online.js';
 
 export const COLOR_NAME: Record<Color, string> = { w: 'Blancas', b: 'Negras' };
 
@@ -15,6 +15,7 @@ export const END_TEXT: Record<EndReason, string> = {
   'fifty-move': 'Tablas por la regla de 50 jugadas',
   abandoned: 'Partida abandonada',
   'agreed-draw': 'Tablas acordadas',
+  timeout: 'Se acabo el tiempo',
 };
 
 /**
@@ -38,6 +39,50 @@ function useSecondsLeft(deadline: number | null): number | null {
   return left;
 }
 
+/**
+ * Late mientras el reloj corre y se para cuando no. Se refresca cada decima porque por
+ * debajo de diez segundos se muestran decimas; con el reloj parado no hay nada que refrescar
+ * y el intervalo ni se crea.
+ */
+function useClockTick(running: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!running) return;
+    const id = window.setInterval(() => setNow(Date.now()), 100);
+    return () => window.clearInterval(id);
+  }, [running]);
+
+  return running ? now : Date.now();
+}
+
+/**
+ * Los dos relojes, el del rival arriba. El numero sale de lo ultimo que dijo el servidor: el
+ * cliente no lleva su propia cuenta (AC-1412).
+ */
+function Clocks({ view, mine }: { view: ClockView; mine: Color }) {
+  const now = useClockTick(view.running !== null);
+  const rival = mine === 'w' ? 'b' : 'w';
+
+  const row = (color: Color, label: string) => {
+    const left = clockRemaining(view, color, now);
+    return (
+      <div className={`clock${view.running === color ? ' ticking' : ''}${left <= 10_000 ? ' low' : ''}`}>
+        <span className="label">{label}</span>
+        <strong>{formatClock(left)}</strong>
+      </div>
+    );
+  };
+
+  return (
+    <div className="panel clocks">
+      {row(rival, COLOR_NAME[rival])}
+      {row(mine, 'Vos')}
+      {view.running === null && <span className="hint">Reloj en pausa</span>}
+    </div>
+  );
+}
+
 export function Hud() {
   const s = useGame();
   const secondsLeft = useSecondsLeft(s.online.opponentDeadline);
@@ -50,6 +95,8 @@ export function Hud() {
     mine: s.online.drawMine,
     theirs: s.online.drawTheirs,
     movesLeft: s.online.drawMovesLeft,
+    yourTurn: view.turn === s.humanColor,
+    armed: s.online.drawArmed,
   });
 
   const lost = (color: Color): PieceType[] =>
@@ -84,6 +131,10 @@ export function Hud() {
                   : `Esperando al rival… ${secondsLeft}s`}
           </span>
         </div>
+      )}
+
+      {s.online.clock !== null && s.mode === 'online' && (
+        <Clocks view={s.online.clock} mine={s.humanColor} />
       )}
 
       <div className="panel counters">
@@ -153,9 +204,13 @@ export function Hud() {
           <div className="draw-offer">
             {/* Ofrecer y aceptar mandan lo mismo: el acuerdo lo cierran los dos. */}
             <button
-              className={s.online.drawTheirs ? 'primary' : undefined}
+              className={s.online.drawTheirs || s.online.drawArmed ? 'primary' : undefined}
               disabled={draw.disabled}
-              onClick={s.offerDrawOnline}
+              onClick={() => {
+                if (draw.action === 'arm') return s.armDrawOnline(true);
+                if (draw.action === 'disarm') return s.armDrawOnline(false);
+                s.offerDrawOnline();
+              }}
             >
               {draw.label}
             </button>

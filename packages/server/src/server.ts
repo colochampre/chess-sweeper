@@ -322,6 +322,14 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
             return send(socket, { t: 'sync', view: viewFor(room, color) });
           }
           broadcastEvents(room, result.events);
+          // La oferta que viaja con la jugada se aplica DESPUES de ella (AC-1413). Si no se
+          // puede —cooldown, o la jugada acabo la partida— se dice y el movimiento queda:
+          // deshacerlo por una oferta seria mucho peor que no ofrecer.
+          if (message.offerDraw === true) {
+            const offered = offerDraw(room, color);
+            if (isRoomError(offered)) send(socket, { t: 'error', message: offered.error });
+            else if (offered.agreed) broadcastEvents(room, offered.events);
+          }
           // Mover contesta a la oferta del rival y desbloquea la propia (AC-1306/1308), asi
           // que el acuerdo cambia en CADA movimiento. Sin avisarlo, los botones se quedan
           // puestos y pulsar "aceptar" despues de mover vuelve a ofrecer tablas.

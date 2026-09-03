@@ -95,6 +95,8 @@ export function Hud() {
     mine: s.online.drawMine,
     theirs: s.online.drawTheirs,
     movesLeft: s.online.drawMovesLeft,
+    yourTurn: view.turn === s.humanColor,
+    armed: s.online.drawArmed,
   });
 
   const lost = (color: Color): PieceType[] =>
@@ -202,9 +204,13 @@ export function Hud() {
           <div className="draw-offer">
             {/* Ofrecer y aceptar mandan lo mismo: el acuerdo lo cierran los dos. */}
             <button
-              className={s.online.drawTheirs ? 'primary' : undefined}
+              className={s.online.drawTheirs || s.online.drawArmed ? 'primary' : undefined}
               disabled={draw.disabled}
-              onClick={s.offerDrawOnline}
+              onClick={() => {
+                if (draw.action === 'arm') return s.armDrawOnline(true);
+                if (draw.action === 'disarm') return s.armDrawOnline(false);
+                s.offerDrawOnline();
+              }}
             >
               {draw.label}
             </button>

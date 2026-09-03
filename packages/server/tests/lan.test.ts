@@ -559,3 +559,49 @@ describe('FR-14 el reloj por el cable', () => {
     guest.bye();
   });
 });
+
+describe('FR-14 la oferta viaja con la jugada', () => {
+  it('AC-1413: la oferta llega al rival despues de aplicarse el movimiento', async () => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('opponent', (m) => m.t === 'opponent' && m.connected);
+
+    host.send({ t: 'move', move: { from: 1, to: 16 }, offerDraw: true });
+
+    // La jugada llega, y la oferta con ella: el rival la piensa en su propio turno.
+    await guest.waitFor('moved');
+    const offered = await guest.waitFor('draw', (m) => m.t === 'draw' && m.theirs);
+    expect(offered).toMatchObject({ t: 'draw', mine: false, theirs: true });
+
+    host.bye();
+    guest.bye();
+  });
+
+  it('AC-1413: si la oferta no se puede, la jugada queda igual', async () => {
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    await host.waitFor('opponent', (m) => m.t === 'opponent' && m.connected);
+
+    // Ofrece, el rival rechaza, y vuelve a ofrecer con su jugada antes de tiempo.
+    host.send({ t: 'draw' });
+    await guest.waitFor('draw', (m) => m.t === 'draw' && m.theirs);
+    guest.send({ t: 'draw-decline' });
+    await host.waitFor('draw', (m) => m.t === 'draw' && !m.mine);
+
+    host.send({ t: 'move', move: { from: 1, to: 16 }, offerDraw: true });
+
+    const refused = await host.waitFor('error');
+    expect(refused.t === 'error' && refused.message).toMatch(/jugadas/i);
+    // Deshacer el movimiento por una oferta rechazada seria mucho peor que no ofrecer.
+    await guest.waitFor('moved');
+
+    host.bye();
+    guest.bye();
+  });
+});

@@ -49,7 +49,12 @@ export type ConnectIntent =
 
 /** Mensajes que se mandan una vez sentado en la sala. */
 export type ClientMessage =
-  | { t: 'move'; move: Move }
+  /**
+   * Un movimiento, y opcionalmente una oferta de tablas que viaja con el. La oferta se
+   * aplica DESPUES del movimiento, que es la secuencia de FIDE —mover, ofrecer, apretar el
+   * reloj— y lo que hace que el rival la piense con su tiempo (AC-1413).
+   */
+  | { t: 'move'; move: Move; offerDraw?: boolean }
   | { t: 'rematch' }
   /** Ofrecer tablas y aceptarlas son el mismo mensaje: se acuerdan cuando lo mandan los dos. */
   | { t: 'draw' }

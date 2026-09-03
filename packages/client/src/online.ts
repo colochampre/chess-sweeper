@@ -178,7 +178,11 @@ export class OnlineClient {
 /** Lo que el boton de tablas ofrece hacer ahora mismo. */
 export interface DrawButton {
   label: string;
-  action: 'offer' | 'accept';
+  /**
+   * `arm` deja la oferta preparada para viajar con la jugada; `disarm` la cancela antes de
+   * mover. `offer` la manda suelta y `accept` contesta a la del rival.
+   */
+  action: 'offer' | 'accept' | 'arm' | 'disarm';
   disabled: boolean;
 }
 
@@ -196,17 +200,29 @@ export function drawButton(offer: {
   mine: boolean;
   theirs: boolean;
   movesLeft: number;
+  yourTurn: boolean;
+  armed: boolean;
 }): DrawButton | null {
   // Contra la maquina no hay con quien acordar, y en hotseat los dos jugadores ya comparten
   // la mesa. Y con la partida terminada lo que se ofrece es la revancha, no las tablas.
   if (offer.mode !== 'online' || offer.status !== 'playing') return null;
-  // Deber jugadas antes de volver a ofrecer no impide decir que si: son cosas distintas.
+  // Aceptar es una respuesta, no una oferta: no espera a ninguna jugada. Y deber jugadas
+  // antes de volver a ofrecer no impide decir que si: son cosas distintas.
   if (offer.theirs) return { label: 'Aceptar tablas', action: 'accept', disabled: false };
   if (offer.mine) return { label: 'Tablas ofrecidas', action: 'offer', disabled: true };
+  if (offer.armed) {
+    return { label: 'Tablas con tu jugada', action: 'disarm', disabled: false };
+  }
   // Un boton que se apaga sin explicarse no se distingue de uno roto: dice lo que falta.
   if (offer.movesLeft > 0) {
     const unit = offer.movesLeft === 1 ? 'jugada' : 'jugadas';
     return { label: `Tablas en ${offer.movesLeft} ${unit}`, action: 'offer', disabled: true };
+  }
+  // Secuencia FIDE: mover, ofrecer, apretar el reloj. En tu turno la oferta espera a tu
+  // jugada para caer en el tiempo del rival (AC-1413); fuera de turno se manda suelta,
+  // que FIDE tambien permite.
+  if (offer.yourTurn) {
+    return { label: 'Ofrecer con tu jugada', action: 'arm', disabled: false };
   }
   return { label: 'Ofrecer tablas', action: 'offer', disabled: false };
 }

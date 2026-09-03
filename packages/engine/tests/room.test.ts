@@ -804,6 +804,21 @@ describe('FR-14 la ausencia para el reloj', () => {
     expect(clockMsLeft(r.clock!, 'w', clockRunningFor(r), t0 + 40_000)).toBe(5 * 60_000 - 10_000);
   });
 
+  it('AC-1410: al reconectar el reloj vuelve tal cual, sin regalar ni cobrar de mas', () => {
+    const { r, host, t0 } = timed();
+    // Consume treinta segundos jugando y se cae.
+    markDisconnected(r, host.color, host.session, t0 + 30_000);
+    const frozen = { ...r.clock!.left };
+
+    // Un minuto fuera, y vuelve.
+    const back = resumeSeat(r, host.token, t0 + 90_000);
+    if (isRoomError(back)) throw new Error(back.error);
+
+    // Ni se le cobra el rato ausente ni se le devuelve lo que ya habia gastado jugando.
+    expect(r.clock!.left).toEqual(frozen);
+    expect(clockMsLeft(r.clock!, 'w', clockRunningFor(r), t0 + 90_000)).toBe(5 * 60_000 - 30_000);
+  });
+
   it('AC-1409: el presupuesto de ausencia es por partida y se acumula', () => {
     const { r, host, t0 } = timed();
 

@@ -84,6 +84,11 @@ export interface OnlineInfo {
   drawMovesLeft: number;
   /** Lo ultimo que dijo el servidor del reloj, o `null` si la sala se juega sin el. */
   clock: ClockView | null;
+  /**
+   * La oferta de tablas esta preparada para viajar con la proxima jugada (AC-1413). Vive en
+   * el cliente porque hasta que se mueva no existe para el servidor.
+   */
+  drawArmed: boolean;
 }
 
 interface AppState {
@@ -133,6 +138,7 @@ interface AppState {
   rematchOnline: () => void;
   offerDrawOnline: () => void;
   declineDrawOnline: () => void;
+  armDrawOnline: (armed: boolean) => void;
   askLeave: () => void;
   cancelLeave: () => void;
   backToMenu: () => void;
@@ -281,6 +287,7 @@ export const useGame = create<AppState>((set, get) => {
             drawTheirs: false,
             drawMovesLeft: 0,
         clock: null,
+        drawArmed: false,
           },
         });
         break;
@@ -405,6 +412,7 @@ export const useGame = create<AppState>((set, get) => {
         drawTheirs: false,
         drawMovesLeft: 0,
         clock: null,
+        drawArmed: false,
       },
     confirmingLeave: false,
 
@@ -459,6 +467,7 @@ export const useGame = create<AppState>((set, get) => {
         drawTheirs: false,
         drawMovesLeft: 0,
         clock: null,
+        drawArmed: false,
       },
         ...renderLayer(view),
         animating: false,
@@ -524,6 +533,7 @@ export const useGame = create<AppState>((set, get) => {
 
     // Ofrecer y aceptar son el mismo mensaje: las tablas se acuerdan cuando lo mandan los dos.
     offerDrawOnline: () => socket?.send({ t: 'draw' }),
+    armDrawOnline: (armed) => set({ online: { ...get().online, drawArmed: armed } }),
     declineDrawOnline: () => socket?.send({ t: 'draw-decline' }),
 
     /**
@@ -566,6 +576,7 @@ export const useGame = create<AppState>((set, get) => {
         drawTheirs: false,
         drawMovesLeft: 0,
         clock: null,
+        drawArmed: false,
       },
         confirmingLeave: false,
       });
@@ -618,7 +629,11 @@ export const useGame = create<AppState>((set, get) => {
 
       if (s.mode === 'online') {
         set({ selected: null, targets: [], error: null });
-        socket?.send({ t: 'move', move });
+        // La oferta preparada viaja CON la jugada, para que el rival la piense con su
+        // tiempo (AC-1413). Se desarma aqui: ya viajo, y si el servidor la rechaza lo dira.
+        const armed = s.online.drawArmed;
+        if (armed) set({ online: { ...get().online, drawArmed: false } });
+        socket?.send(armed ? { t: 'move', move, offerDraw: true } : { t: 'move', move });
         return;
       }
 

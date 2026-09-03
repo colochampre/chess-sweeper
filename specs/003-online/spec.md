@@ -3,7 +3,8 @@
 Estado: **activo** · Núcleo: `@cm/engine/room` · Transportes: `@cm/worker` (produccion) y
 `@cm/server` (LAN y desarrollo) · Tests: `packages/engine/tests/room.test.ts`,
 `packages/server/tests/lan.test.ts` (integracion), `packages/client/tests/connect.test.ts`,
-`packages/client/tests/draw.test.ts` y `packages/engine/tests/protocol.test.ts`
+`packages/client/tests/draw.test.ts`, `packages/client/tests/clock.test.ts`,
+`packages/engine/tests/clock.test.ts` y `packages/engine/tests/protocol.test.ts`
 
 Servidor autoritativo. Guarda el `GameState` completo, con las minas, y a los clientes solo
 les manda `PlayerView`.
@@ -332,6 +333,11 @@ con alguien ausente, el reloj se para y corre la ausencia.
   —mover, ofrecer, apretar el reloj— que hasta ahora no era observable porque no habia reloj
   que apretar. El mensaje suelto de FR-13 sigue existiendo, porque aceptar no es un
   movimiento y ofrecer fuera de turno tambien se permite.
+
+AC-1406 se comprueba a mano, como los de FR-6: el control mas corto son 3 minutos, asi que
+ningun test puede esperar a que caiga una bandera de verdad. El calculo del instante si esta
+cubierto (`flagFallsAt`); lo que necesita una pasada manual es el despertador de cada
+transporte.
 
 ### Donde vive
 

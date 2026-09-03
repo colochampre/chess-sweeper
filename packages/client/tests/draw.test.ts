@@ -13,6 +13,8 @@ describe('FR-13 ofrecer tablas', () => {
     mine: false,
     theirs: false,
     movesLeft: 0,
+    yourTurn: false,
+    armed: false,
     ...over,
   });
   /** Los casos en los que el boton se muestra: el resto devuelve `null`. */
@@ -76,5 +78,31 @@ describe('FR-13 ofrecer tablas', () => {
       action: 'accept',
       disabled: false,
     });
+  });
+  it('AC-1413: en tu turno la oferta se arma para viajar con la jugada', () => {
+    // Secuencia FIDE: mover, ofrecer, apretar el reloj. Mandarla suelta antes de mover la
+    // haria caer en el tiempo propio, que es justo lo contrario de lo que se busca.
+    expect(offer({ yourTurn: true })).toEqual({
+      label: 'Ofrecer con tu jugada',
+      action: 'arm',
+      disabled: false,
+    });
+  });
+
+  it('AC-1413: armada, se ve que esta armada y se puede desarmar', () => {
+    const button = offer({ yourTurn: true, armed: true });
+
+    expect(button.label).toBe('Tablas con tu jugada');
+    expect(button.action).toBe('disarm');
+    expect(button.disabled).toBe(false);
+  });
+
+  it('AC-1413: fuera de turno se ofrece suelta, que FIDE tambien permite', () => {
+    expect(offer({ yourTurn: false }).action).toBe('offer');
+  });
+
+  it('AC-1413: aceptar lo que ofrece el rival no espera a ninguna jugada', () => {
+    // Es una respuesta, no una oferta: no tiene sentido hacerla esperar a mover.
+    expect(offer({ theirs: true, yourTurn: true }).action).toBe('accept');
   });
 });

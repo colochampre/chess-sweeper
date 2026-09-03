@@ -32,6 +32,9 @@ import {
   opponentOf,
   parseIntent,
   playMove,
+  declineDraw,
+  drawMovesLeft,
+  offerDraw,
   requestRematch,
   resumeSeat,
   takeSeat,
@@ -219,6 +222,19 @@ export class Room implements DurableObject {
     }
   }
 
+  /** Quien ha ofrecido tablas, por el mismo motivo: una oferta muda no se ve. */
+  private broadcastDrawState(): void {
+    if (this.room === null) return;
+    for (const color of ['w', 'b'] as const) {
+      this.send(color, {
+        t: 'draw',
+        mine: this.room.seats[color]?.offersDraw === true,
+        theirs: this.room.seats[opponentOf(color)]?.offersDraw === true,
+        movesLeft: drawMovesLeft(this.room, color),
+      });
+    }
+  }
+
   private broadcastPresence(): void {
     if (this.room === null) return;
     for (const color of ['w', 'b'] as const) {
@@ -334,6 +350,34 @@ export class Room implements DurableObject {
           return;
         }
         this.broadcastEvents(result.events);
+        // Mover contesta a la oferta del rival y desbloquea la propia (AC-1306/1308), asi
+        // que el acuerdo cambia en CADA movimiento. Sin avisarlo, los botones se quedan
+        // puestos y pulsar "aceptar" despues de mover vuelve a ofrecer tablas.
+        this.broadcastDrawState();
+        await this.save();
+        return;
+      }
+
+      case 'draw': {
+        const offered = offerDraw(this.room, color);
+        if (isRoomError(offered)) {
+          return ws.send(encode({ t: 'error', message: offered.error }));
+        }
+        // Con una sola oferta no termina nada: se avisa a los dos y se espera respuesta.
+        // Acordadas, solo va el final: mandar ademas el acuerdo en blanco se leeria como un
+        // rechazo justo antes de las tablas, y el boton ya desaparece con la partida.
+        if (offered.agreed) this.broadcastEvents(offered.events);
+        else this.broadcastDrawState();
+        await this.save();
+        return;
+      }
+
+      case 'draw-decline': {
+        const refused = declineDraw(this.room, color);
+        if (isRoomError(refused)) {
+          return ws.send(encode({ t: 'error', message: refused.error }));
+        }
+        this.broadcastDrawState();
         await this.save();
         return;
       }

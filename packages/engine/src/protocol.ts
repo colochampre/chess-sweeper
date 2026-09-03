@@ -7,7 +7,7 @@
  */
 import type { Color, Difficulty, GameEvent, Move, PlayerView } from './types.js';
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 export interface RoomSettings {
   difficulty: Difficulty;
@@ -30,6 +30,9 @@ export type ConnectIntent =
 export type ClientMessage =
   | { t: 'move'; move: Move }
   | { t: 'rematch' }
+  /** Ofrecer tablas y aceptarlas son el mismo mensaje: se acuerdan cuando lo mandan los dos. */
+  | { t: 'draw' }
+  | { t: 'draw-decline' }
   | { t: 'leave' };
 
 export type ServerMessage =
@@ -43,6 +46,12 @@ export type ServerMessage =
   | { t: 'opponent'; connected: boolean; msLeft?: number }
   /** Estado del acuerdo de revancha: quien la ha pedido de los dos. */
   | { t: 'rematch'; mine: boolean; theirs: boolean }
+  /**
+   * Estado de la oferta de tablas: quien la ha ofrecido de los dos, y cuantas jugadas
+   * faltan para poder volver a ofrecer (0 si ya se puede). Lo cuenta el servidor para que
+   * la espera que ve el jugador y la que aplica el servidor no puedan discrepar.
+   */
+  | { t: 'draw'; mine: boolean; theirs: boolean; movesLeft: number }
   | { t: 'error'; message: string };
 
 /**

@@ -57,7 +57,9 @@ export type EndReason =
   | 'insufficient-material'
   | 'fifty-move'
   /** Un jugador se fue de la partida, o se ausento el tiempo suficiente. Solo en online. */
-  | 'abandoned';
+  | 'abandoned'
+  /** Los dos jugadores acordaron tablas. Solo en online: hace falta con quien acordar. */
+  | 'agreed-draw';
 
 export type GameStatus =
   | 'playing'

@@ -16,12 +16,14 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import {
   CLOSE_REFUSED,
   CLOSE_REPLACED,
+  PROTOCOL_STALE_MESSAGE,
   WS_PATH,
   absenceMsLeft,
   createRoom,
   forfeitAbsent,
   generateRoomCode,
   isOriginAllowed,
+  isProtocolCurrent,
   isRoomError,
   isStale,
   leaveRoom,
@@ -202,14 +204,22 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       return rejectUpgrade(socket, 403, 'Forbidden');
     }
 
-    const intent = parseIntent(url.searchParams);
-    if (intent === null) return rejectUpgrade(socket, 400, 'Bad Request');
+    // La version manda sobre el resto: a un cliente viejo, "parametros invalidos" no le
+    // sirve de nada, y ademas sus parametros pueden ser invalidos justo por ser viejo.
+    const stale = !isProtocolCurrent(url.searchParams);
+    const intent = stale ? null : parseIntent(url.searchParams);
+    if (!stale && intent === null) return rejectUpgrade(socket, 400, 'Bad Request');
 
     wss.handleUpgrade(req, socket, head, (ws, request) => {
       // Con `noServer: true` nadie emite 'connection' por nosotros: hay que hacerlo aqui.
       // Sin esta linea el socket se conecta pero no escucha nada, y todos los movimientos
       // se descartan en silencio.
       wss.emit('connection', ws, request);
+
+      // Este si se rechaza DESPUES del apreton de manos, a proposito: el navegador no le
+      // deja leer al cliente el motivo de un upgrade fallido, y este es el unico rechazo
+      // que el jugador puede arreglar solo. Ver AC-905.
+      if (intent === null) return refuse(ws, PROTOCOL_STALE_MESSAGE);
 
       if (intent.a === 'create') {
         let code = generateRoomCode();

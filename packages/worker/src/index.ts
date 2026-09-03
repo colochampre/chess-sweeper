@@ -24,7 +24,9 @@ import {
   createRoom,
   forfeitAbsent,
   generateRoomCode,
+  PROTOCOL_STALE_MESSAGE,
   isOriginAllowed,
+  isProtocolCurrent,
   isRoomError,
   isStale,
   leaveRoom,
@@ -69,6 +71,19 @@ interface Attachment {
   session: string;
 }
 
+/**
+ * Rechazo con motivo: se acepta el socket solo para poder explicarse y se cierra. Un rechazo
+ * HTTP dejaria al cliente sin poder leer el porque, que es justo lo que evita FR-9.
+ */
+function refuseSocket(message: string): Response {
+  const pair = new WebSocketPair();
+  const [client, server] = Object.values(pair);
+  server.accept();
+  server.send(encode({ t: 'error', message }));
+  server.close(1008, message);
+  return new Response(null, { status: 101, webSocket: client });
+}
+
 // ---------------------------------------------------------------------------
 // Worker: valida, enruta hacia la sala y sirve el cliente compilado.
 // ---------------------------------------------------------------------------
@@ -111,6 +126,12 @@ export default {
     if (!originAllowed(request, env)) {
       return new Response('Origen no permitido', { status: 403 });
     }
+
+    // La version manda sobre el resto: a un cliente viejo, "parametros invalidos" no le sirve
+    // de nada, y ademas sus parametros pueden ser invalidos justo por ser viejo. El rechazo
+    // va por el socket y no como HTTP porque el navegador no le deja leer al cliente el
+    // motivo de un upgrade fallido, y este es el unico que el jugador arregla solo. AC-905.
+    if (!isProtocolCurrent(url.searchParams)) return refuseSocket(PROTOCOL_STALE_MESSAGE);
 
     const intent = parseIntent(url.searchParams);
     if (intent === null) return new Response('Parametros de conexion invalidos', { status: 400 });
@@ -252,12 +273,7 @@ export class Room implements DurableObject {
 
   /** Error de usuario: se acepta el socket solo para poder explicarlo y se cierra. */
   private refuse(message: string): Response {
-    const pair = new WebSocketPair();
-    const [client, server] = Object.values(pair);
-    server.accept();
-    server.send(encode({ t: 'error', message }));
-    server.close(1008, message);
-    return new Response(null, { status: 101, webSocket: client });
+    return refuseSocket(message);
   }
 
   async fetch(request: Request): Promise<Response> {

@@ -2,8 +2,8 @@
 
 Estado: **activo** · Núcleo: `@cm/engine/room` · Transportes: `@cm/worker` (produccion) y
 `@cm/server` (LAN y desarrollo) · Tests: `packages/engine/tests/room.test.ts`,
-`packages/server/tests/lan.test.ts` (integracion), `packages/client/tests/connect.test.ts` y
-`packages/client/tests/draw.test.ts`
+`packages/server/tests/lan.test.ts` (integracion), `packages/client/tests/connect.test.ts`,
+`packages/client/tests/draw.test.ts` y `packages/engine/tests/protocol.test.ts`
 
 Servidor autoritativo. Guarda el `GameState` completo, con las minas, y a los clientes solo
 les manda `PlayerView`.
@@ -54,6 +54,21 @@ Durable Object de la sala tiene que decidirse **antes** de aceptar el socket.
 - **AC-502** Se rechaza cualquier parametro que no cuadre: accion desconocida, dificultad
   inventada, tablero fuera de rango, codigo con caracteres fuera del alfabeto, token que no
   tiene forma de UUID. El codigo se normaliza antes de validarse.
+- **AC-503** La version del protocolo viaja tambien en la URL, y el servidor solo acepta la
+  suya. `PROTOCOL_VERSION` existia como numero que nadie miraba: documentaba el formato del
+  cable sin protegerlo, asi que un cliente viejo contra un servidor nuevo no se rechazaba, se
+  rompia raro. Una pestana abierta desde antes de un despliegue es el caso normal, no el
+  raro. Sin version tampoco se entra: un cliente que no la manda es, justamente, uno viejo.
+- **AC-504** Cambiar la forma de lo que viaja por el cable sin subir la version rompe la
+  suite. AC-503 solo sirve si la version se sube cuando toca, y "acordarse" no es un
+  mecanismo: es la clase de obligacion que se cumple tres veces y despues no. Se guarda una
+  huella de las declaraciones de `ClientMessage`, `ServerMessage` y `ConnectIntent`, con todo
+  lo que arrastran, junto a la version que le corresponde. La huella se calcula del codigo,
+  no de una lista escrita a mano, para que un tipo nuevo entre solo.
+  El historial se guarda por version y no como una unica huella al dia: asi, al cambiar los
+  mensajes, la unica salida honesta es anadir una entrada nueva. Pisar la de la version
+  vigente tambien compila, pero deja de ser un despiste y pasa a ser una linea muy visible en
+  el diff, que es justo lo que se busca.
 
 ## FR-6 · Produccion sobre Durable Objects
 
@@ -111,6 +126,14 @@ Un `socket.destroy()` a secas no deja al cliente ni un motivo: se queda en "Cone
 - **AC-902** Un origen ajeno se rechaza con 403 antes del apreton de manos.
 - **AC-903** El circuito de desarrollo (Vite en otro puerto) si se acepta.
 - **AC-904** Los parametros invalidos se rechazan con 400, tambien antes del apreton de manos.
+- **AC-905** Una version de protocolo que no coincide abre el socket, manda `error` diciendo
+  que hay que recargar y cierra con `CLOSE_REFUSED`, igual que AC-901.
+  Este no se rechaza antes del apreton de manos, y es a proposito: el navegador no le deja
+  leer al cliente ni el codigo ni el motivo de un upgrade fallido, asi que un 426 seria
+  correcto de libro y dejaria al jugador exactamente igual que el `socket.destroy()` a secas
+  que abre este FR. Aqui hace falta que el motivo llegue, porque el arreglo lo tiene que
+  hacer el jugador: recargar. Antes del apreton de manos se rechaza lo que el jugador no
+  puede arreglar (AC-902, AC-904); despues, lo que si.
 
 ## FR-10 · Politica de reconexion del cliente
 
@@ -134,7 +157,7 @@ Un `socket.destroy()` a secas no deja al cliente ni un motivo: se queda en "Cone
   entrada, la segunda reclamaria el asiento de la primera y las dos jugarian con el mismo
   color. Tener token para una sala no significa que el sitio libre sea el nuestro.
   Si la credencial tampoco vale, se descarta y se muestra el rechazo.
-- **AC-1003** El codigo de sala se valida y se normaliza al escribirlo, no al enviarlo: lo
+- **AC-1006** El codigo de sala se valida y se normaliza al escribirlo, no al enviarlo: lo
   que se ve en la caja es lo que se manda.
 
 AC-1001 a AC-1003 se comprueban a mano con las dos pestanas; viven en la capa de WebSocket

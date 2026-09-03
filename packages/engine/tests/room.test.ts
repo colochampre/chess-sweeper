@@ -3,6 +3,7 @@ import {
   ABSENCE_FORFEIT_MS,
   absenceMsLeft,
   ROOM_CODE_LENGTH,
+  PROTOCOL_VERSION,
   ROOM_TTL_MS,
   DRAW_COOLDOWN_MOVES,
   createRoom,
@@ -11,6 +12,7 @@ import {
   forfeitAbsent,
   generateRoomCode,
   intentToQuery,
+  isProtocolCurrent,
   isRoomError,
   isStale,
   leaveRoom,
@@ -193,6 +195,20 @@ describe('FR-5 parametros de conexion', () => {
     for (const query of bad) {
       expect(parseIntent(new URLSearchParams(query))).toBeNull();
     }
+  });
+
+  it('AC-503: la version del protocolo viaja en la query y vuelve', () => {
+    const query = new URLSearchParams(intentToQuery({ a: 'join', code: 'ABC234' }));
+
+    expect(query.get('v')).toBe(String(PROTOCOL_VERSION));
+    expect(isProtocolCurrent(query)).toBe(true);
+  });
+
+  it('AC-503: una version distinta, o ninguna, no es la nuestra', () => {
+    // Sin version es un cliente anterior a que existiera el campo: tambien es viejo.
+    expect(isProtocolCurrent(new URLSearchParams('a=join&code=ABC234'))).toBe(false);
+    expect(isProtocolCurrent(new URLSearchParams(`v=${PROTOCOL_VERSION - 1}`))).toBe(false);
+    expect(isProtocolCurrent(new URLSearchParams('v=no-es-un-numero'))).toBe(false);
   });
 
   it('AC-502: el codigo se normaliza antes de validarse', () => {

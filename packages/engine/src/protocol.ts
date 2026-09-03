@@ -7,7 +7,25 @@
  */
 import type { Color, Difficulty, GameEvent, Move, PlayerView } from './types.js';
 
+/**
+ * Version del formato del cable. Viaja en la URL de la conexion y el servidor solo acepta la
+ * suya: si fuera solo un numero documentado, un cliente viejo contra un servidor nuevo no se
+ * rechazaria, se rompería raro. Se sube cada vez que cambian `ClientMessage` o `ServerMessage`.
+ */
 export const PROTOCOL_VERSION = 3;
+
+/** Parametro de la query donde viaja la version. */
+export const PROTOCOL_PARAM = 'v';
+
+/** El mismo motivo en los dos transportes: el arreglo lo hace el jugador, recargando. */
+export const PROTOCOL_STALE_MESSAGE = 'Esta version del juego quedo vieja: recarga la pagina.';
+
+/**
+ * Si esa conexion habla nuestra misma version. Sin el parametro tampoco vale: un cliente que
+ * no lo manda es anterior a que existiera, que es justamente uno viejo.
+ */
+export const isProtocolCurrent = (params: URLSearchParams): boolean =>
+  params.get(PROTOCOL_PARAM) === String(PROTOCOL_VERSION);
 
 export interface RoomSettings {
   difficulty: Difficulty;
@@ -84,6 +102,9 @@ export const WS_PATH = '/ws';
 export function intentToQuery(intent: ConnectIntent): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(intent)) params.set(key, String(value));
+  // La version va con la intencion, no aparte: el servidor la necesita en el mismo sitio y
+  // antes que nada, porque decide si acepta la conexion antes del apreton de manos.
+  params.set(PROTOCOL_PARAM, String(PROTOCOL_VERSION));
   return params.toString();
 }
 

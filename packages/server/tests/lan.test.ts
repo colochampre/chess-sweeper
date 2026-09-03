@@ -9,7 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket, { type ClientOptions } from 'ws';
-import { ABSENCE_FORFEIT_MS, type ServerMessage } from '@cm/engine';
+import { ABSENCE_FORFEIT_MS, PROTOCOL_VERSION, type ServerMessage } from '@cm/engine';
 import { startServer, type RunningServer } from '../src/server.js';
 
 let server: RunningServer;
@@ -38,7 +38,11 @@ interface Client {
 }
 
 function connect(query: string, options: ClientOptions = {}): Client {
-  const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws?${query}`, options);
+  // Representa a un cliente al dia: manda la version del protocolo salvo que el test quiera
+  // probar justamente otra. Asi los tests hablan del caso que les interesa y no del cable.
+  const full = new URLSearchParams(query);
+  if (!full.has('v')) full.set('v', String(PROTOCOL_VERSION));
+  const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws?${full}`, options);
   const messages: ServerMessage[] = [];
   const waiters: {
     type: string;
@@ -445,5 +449,40 @@ describe('FR-13 ofrecer tablas', () => {
 
     host.bye();
     guest.bye();
+  });
+});
+
+describe('FR-9 la version del protocolo se comprueba', () => {
+  it('AC-905: una version vieja recibe el motivo y un cierre que no se reintenta', async () => {
+    const stale = connect(`${CREATE}&v=${PROTOCOL_VERSION - 1}`);
+
+    // El socket SI se abre: es la unica forma de que al jugador le llegue el motivo.
+    expect(await stale.opened).toBe(true);
+    const refused = await stale.waitFor('error');
+    expect(refused.t === 'error' && refused.message).toMatch(/recarga/i);
+    // Y no se sienta a nadie con un cable que no se entiende.
+    expect(await notReceived(stale, 'seated')).toBe(true);
+
+    stale.bye();
+  });
+
+  it('AC-905: un cliente que no manda version tampoco entra', async () => {
+    // Anterior a que el campo existiera, que es exactamente un cliente viejo.
+    const ancient = connect(`${CREATE}&v=`);
+
+    const refused = await ancient.waitFor('error');
+    expect(refused.t === 'error' && refused.message).toMatch(/recarga/i);
+    expect(await notReceived(ancient, 'seated')).toBe(true);
+
+    ancient.bye();
+  });
+
+  it('AC-503: con la version al dia se entra con normalidad', async () => {
+    const current = connect(CREATE);
+
+    expect(await current.opened).toBe(true);
+    expect((await current.waitFor('seated')).t).toBe('seated');
+
+    current.bye();
   });
 });

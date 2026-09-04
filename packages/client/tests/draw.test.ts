@@ -82,8 +82,9 @@ describe('FR-13 ofrecer tablas', () => {
   it('AC-1413: en tu turno la oferta se arma para viajar con la jugada', () => {
     // Secuencia FIDE: mover, ofrecer, apretar el reloj. Mandarla suelta antes de mover la
     // haria caer en el tiempo propio, que es justo lo contrario de lo que se busca.
+    // Y la etiqueta nombra las tablas: "Ofrecer con tu jugada" decia cuando pero nunca que.
     expect(offer({ yourTurn: true })).toEqual({
-      label: 'Ofrecer con tu jugada',
+      label: 'Ofrecer tablas al mover',
       action: 'arm',
       disabled: false,
     });
@@ -92,7 +93,8 @@ describe('FR-13 ofrecer tablas', () => {
   it('AC-1413: armada, se ve que esta armada y se puede desarmar', () => {
     const button = offer({ yourTurn: true, armed: true });
 
-    expect(button.label).toBe('Tablas con tu jugada');
+    // Dice lo que hace al pulsarlo. Que este armada se ve en que el boton pasa a principal.
+    expect(button.label).toBe('Cancelar la oferta');
     expect(button.action).toBe('disarm');
     expect(button.disabled).toBe(false);
   });

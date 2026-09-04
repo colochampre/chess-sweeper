@@ -10,6 +10,8 @@
   --text: #e9e5df;
   --muted: #9b958c;
   --accent: #7fa650;
+  --accent-hi: #a9d16b;
+  --accent-lo: #46632a;
   --danger: #d4483b;
   --flip: 560ms;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -65,46 +67,235 @@ button.danger:hover:not(:disabled) {
   color: #fff;
 }
 
-/* ---------- Menu ---------- */
+/* ---------- Armazon comun ---------- */
 
-.menu {
-  max-width: 760px;
+.app {
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 2.5rem 1.5rem 4rem;
+  padding: 1.5rem 2rem;
+  /* Ocupa la pantalla: el tablero crece con ella en vez de flotar arriba con hueco debajo. */
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 1.75rem;
 }
-.menu header {
+.app-head {
   display: flex;
-  gap: 1.25rem;
   align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
 }
-.menu .logo {
-  width: 68px;
+.app-head .logo {
+  width: 40px;
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
 }
-.menu h1 {
-  margin: 0 0 0.35rem;
-  font-size: 2rem;
+.app-head h1 {
+  margin: 0;
+  font-size: 1.5rem;
   letter-spacing: -0.02em;
 }
-.menu p {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.5;
-}
-.menu h2 {
-  font-size: 0.82rem;
+.app-body h2 {
+  font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.09em;
   color: var(--muted);
-  margin: 0 0 0.6rem;
+  margin: 0 0 0.5rem;
 }
+
+/*
+ * El ancho del tablero sale del ALTO disponible: es lo que hace que ocupe la pantalla en vez
+ * de quedarse en un tamano fijo con hueco debajo. `--chrome` es todo lo que no es tablero:
+ * cabecera, las dos tiras, la ayuda y los margenes.
+ */
+.stage {
+  --chrome: 260px;
+  --board: min(100%, 780px, calc(100vh - var(--chrome)));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* El tablero se lleva la columna ancha: es lo que se viene a hacer, y esta presente. */
+.app-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 2rem;
+  /* Estirado, no arriba: asi el riel puede repartirse el alto igual que el tablero. */
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+@media (max-width: 900px) {
+  .app-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .stage {
+    --board: min(100%, 520px);
+    margin: 0 auto;
+  }
+}
+/* El tablero manda el ancho de su columna, con el tope de siempre para no pasarse de alto. */
+.stage .board {
+  width: 100%;
+}
+.stage-caption {
+  margin: 0.9rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+.stage-caption strong {
+  color: var(--text);
+}
+
+.rail,
+.hud {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.rail > .hud {
+  flex: 1;
+}
+.rail .panel {
+  padding: 1rem;
+}
+.rail .actions button {
+  padding: 0.7rem 0.9rem;
+}
+/* Al fondo de la columna lo que no decide la partida: preferencias, y la nota de desarrollo. */
+.hud .prefs,
+.rail .footer-hint {
+  margin-top: auto;
+}
+.rail .resume {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  border-color: var(--accent);
+}
+.rail .resume small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.field .label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+/* Un desplegable, no cuatro tarjetas: el control de tiempo es una eleccion, no una seccion. */
+.field select {
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  background-color: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.6rem 2.1rem 0.6rem 0.75rem;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%239b958c' stroke-width='1.8' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+}
+.field select:hover {
+  border-color: #56524d;
+}
+
+/*
+ * La unica apuesta del menu, y sale del propio juego: el bisel del Buscaminas, el mismo que
+ * lleva la niebla del tablero (--fog-hi / --fog-lo). En relieve como una casilla sin
+ * destapar, hundido al apretarlo. Es material de este juego, no de una web de ajedrez.
+ */
+.rail .start {
+  width: 100%;
+  padding: 0.95rem 1rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #14210a;
+  background: var(--accent);
+  border: 3px solid;
+  border-color: var(--accent-hi) var(--accent-lo) var(--accent-lo) var(--accent-hi);
+  border-radius: 3px;
+}
+.rail .start:hover {
+  background: #8fb75c;
+}
+.rail .start:active {
+  border-color: var(--accent-lo) var(--accent-hi) var(--accent-hi) var(--accent-lo);
+}
+.rail .start-hint {
+  margin: -0.3rem 0 0.4rem;
+  text-align: center;
+  font-size: 0.78rem;
+}
+
+/* Todo lo demas es visiblemente secundario: mismo peso entre si, ninguno con el de arriba. */
+.alt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.alt-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+}
+.alt-action small {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.tweaks {
+  border-top: 1px solid var(--line);
+  margin-top: 0.4rem;
+  padding-top: 0.85rem;
+}
+.tweaks summary {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+}
+.tweaks summary::-webkit-details-marker {
+  display: none;
+}
+.tweaks summary::before {
+  content: '';
+  border: 4px solid transparent;
+  border-left-color: var(--muted);
+  transition: transform 0.15s;
+}
+.tweaks[open] summary::before {
+  transform: rotate(90deg) translate(1px, 1px);
+}
+.tweaks summary:hover {
+  color: var(--text);
+}
+.tweaks section {
+  margin-top: 1rem;
+}
+.rail .footer-hint {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+}
+
 .options {
   display: grid;
-  gap: 0.6rem;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.45rem;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
 }
 .options.row {
   grid-template-columns: repeat(3, 1fr);
@@ -112,33 +303,25 @@ button.danger:hover:not(:disabled) {
 .option {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.2rem;
-  text-align: left;
-  padding: 0.8rem 0.9rem;
+  padding: 0.6rem 0.5rem;
+  font-size: 0.85rem;
 }
 .option small {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
 }
 /* Mas especifico que `button:hover` para que la seleccion no se pierda al pasar el raton. */
 .option.active,
 .option.active:hover {
   border-color: var(--accent);
   background: #37402c;
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 0 -3px 0 var(--accent);
 }
 .option .swatch {
-  width: 38px;
-  height: 38px;
-}
-.slider-row {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-.slider-row input[type='range'] {
-  flex: 1;
+  width: 30px;
+  height: 30px;
 }
 .hint {
   color: var(--muted);
@@ -148,22 +331,45 @@ button.danger:hover:not(:disabled) {
 
 /* ---------- Layout de partida ---------- */
 
-.game {
-  display: flex;
-  gap: 1.75rem;
-  padding: 1.5rem;
-  align-items: flex-start;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-.game .side {
-  width: 320px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
+.board-area,
+.table,
+.stage-caption {
+  width: var(--board);
 }
 .board-area {
   position: relative;
+}
+
+/* ---------- La mesa: el tablero con un jugador a cada lado ---------- */
+
+.table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.side-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 34px;
+}
+.side-bar .who {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.side-bar .advantage {
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+/* El reloj al extremo opuesto del nombre, como en cualquier tablero con reloj. */
+.side-bar .clock {
+  margin-left: auto;
+}
+.table .clock-paused {
+  margin: 0;
+  text-align: center;
+  font-size: 0.72rem;
 }
 .panel {
   background: var(--bg-soft);
@@ -439,16 +645,16 @@ button.danger:hover:not(:disabled) {
   align-items: center;
   gap: 0.6rem;
 }
-.turn .dot {
+.dot {
   width: 16px;
   height: 16px;
   border-radius: 50%;
   border: 1px solid #000;
 }
-.turn .dot.w {
+.dot.w {
   background: #fff;
 }
-.turn .dot.b {
+.dot.b {
   background: #111;
 }
 .turn .check {
@@ -458,23 +664,14 @@ button.danger:hover:not(:disabled) {
   font-size: 0.78rem;
   letter-spacing: 0.08em;
 }
-.captures .side + .side {
-  margin-top: 0.6rem;
-}
 .graveyard {
   display: flex;
   flex-wrap: wrap;
-  min-height: 26px;
 }
 .graveyard img {
-  width: 26px;
-  height: 26px;
-  margin-right: -8px;
-}
-.material {
-  margin-top: 0.6rem;
-  font-size: 0.8rem;
-  color: var(--muted);
+  width: 20px;
+  height: 20px;
+  margin-right: -6px;
 }
 .actions {
   display: flex;
@@ -619,21 +816,15 @@ button.danger:hover:not(:disabled) {
   letter-spacing: 0.2em;
   text-transform: uppercase;
 }
-.lobby {
-  align-items: center;
-  text-align: center;
-  max-width: 460px;
-}
 .room-code {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  align-items: center;
-  width: 100%;
+  gap: 0.4rem;
+  text-align: center;
 }
 .room-code strong {
   font-family: 'Consolas', monospace;
-  font-size: 2.4rem;
+  font-size: 2rem;
   letter-spacing: 0.32em;
   color: var(--accent);
   padding-left: 0.32em;
@@ -641,7 +832,7 @@ button.danger:hover:not(:disabled) {
 .room-code small {
   color: var(--muted);
 }
-.menu code {
+.app code {
   background: #1b1a18;
   padding: 0.1rem 0.35rem;
   border-radius: 3px;
@@ -649,22 +840,15 @@ button.danger:hover:not(:disabled) {
 
 /* ---------- Reloj ---------- */
 
-.clocks {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
 .clock {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 0.3rem 0.5rem;
+  padding: 0.25rem 0.65rem;
+  background: #1b1a18;
   border: 1px solid transparent;
   border-radius: 4px;
   font-variant-numeric: tabular-nums;
 }
 .clock strong {
-  font-size: 1.35rem;
+  font-size: 1.15rem;
   letter-spacing: 0.02em;
 }
 /* El que corre se distingue de un vistazo: sin esto hay que leer los dos para saber. */
@@ -675,7 +859,8 @@ button.danger:hover:not(:disabled) {
 .clock.low strong {
   color: var(--danger);
 }
-.clocks .hint {
-  text-align: center;
-  font-size: 0.72rem;
+
+/* Un tablero de exhibicion: se mira, no se juega. Sin cursor que prometa un clic. */
+.board.static .cell {
+  cursor: default;
 }

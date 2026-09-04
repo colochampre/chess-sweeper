@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import {
-  MINE_DENSITY,
+  DEFAULT_CONFIG,
   ROOM_CODE_LENGTH,
-  configFor,
   isValidRoomCode,
   mineRowRange,
   normalizeRoomCode,
@@ -10,234 +9,205 @@ import {
   type Difficulty,
   type TimeControl,
 } from '@cm/engine';
-import { MINE_SRC, pieceSrc } from '../theme.js';
-import { useGame, type Mode } from '../store.js';
+import { pieceSrc } from '../theme.js';
+import { useGame } from '../store.js';
 import { loadSeat } from '../online.js';
+import { previewScene } from '../boardScene.js';
+import { BoardView } from './BoardView.js';
+import { TableView, openingSides } from './Table.js';
+import {
+  DEFAULT_BOT_LEVEL,
+  DEFAULT_COLOR,
+  DEFAULT_DIFFICULTY,
+  DEFAULT_MODE,
+  DEFAULT_TIME_CONTROL,
+  DIFFICULTIES,
+  MODES,
+  TIME_OPTIONS,
+} from '../menuOptions.js';
 
-/** El orden es el de la lista: el primero es el que se ofrece por defecto. */
-const MODES: { value: Mode; label: string; hint: string }[] = [
-  { value: 'online', label: 'Online', hint: 'Crea una sala o entra con un codigo' },
-  { value: 'bot', label: 'Contra la maquina', hint: 'Elige la fuerza del rival' },
-  { value: 'hotseat', label: 'Dos jugadores', hint: 'Mismo dispositivo, el tablero gira en cada turno' },
-];
-
-/** El primero es el de por defecto: sin reloj, que es como se jugaba hasta ahora. */
-const TIME_OPTIONS: { value: TimeControl; label: string; hint: string }[] = [
-  { value: 'none', label: 'Sin reloj', hint: 'Sin prisa' },
-  { value: '5+2', label: '5+2', hint: '5 min y 2 s por jugada' },
-  { value: '10+5', label: '10+5', hint: '10 min y 5 s por jugada' },
-  { value: '15+10', label: '15+10', hint: '15 min y 10 s por jugada' },
-];
-
-const DIFFICULTIES: { value: Difficulty; label: string }[] = [
-  { value: 'easy', label: 'Facil' },
-  { value: 'normal', label: 'Normal' },
-  { value: 'hard', label: 'Dificil' },
-];
+/** Las partidas normales se juegan en 8x8. Otros tamanos son del panel de balance (AC-303). */
+const BOARD_SIZE = DEFAULT_CONFIG.files;
 
 export function Menu() {
   const { startLocal, hostOnline, joinOnline, resumeOnline, error } = useGame();
-  const [mode, setMode] = useState<Mode>(MODES[0].value);
-  const [difficulty, setDifficulty] = useState<Difficulty>('normal');
-  const [botLevel, setBotLevel] = useState<Difficulty>('normal');
-  // Al azar por defecto: en online el color se negocia con el rival, y elegir blancas de
-  // entrada da la primera jugada a quien monta la sala sin que nadie lo haya acordado.
-  const [color, setColor] = useState<Color | 'random'>('random');
-  const [timeControl, setTimeControl] = useState<TimeControl>(TIME_OPTIONS[0].value);
-  const [boardSize, setBoardSize] = useState(8);
+  const [difficulty, setDifficulty] = useState<Difficulty>(DEFAULT_DIFFICULTY);
+  const [botLevel, setBotLevel] = useState<Difficulty>(DEFAULT_BOT_LEVEL);
+  const [color, setColor] = useState<Color | 'random'>(DEFAULT_COLOR);
+  const [timeControl, setTimeControl] = useState<TimeControl>(DEFAULT_TIME_CONTROL);
+  const [joining, setJoining] = useState(false);
   const [joinCode, setJoinCode] = useState('');
 
-  const config = configFor(difficulty, { files: boardSize, ranks: boardSize, seed: 0 });
-  const { start, end } = mineRowRange(config);
-  const mineRows = Math.max(0, end - start + 1);
   const savedSeat = loadSeat();
+  // Al azar se dibuja con las blancas abajo: todavia no hay un lado que ensenar.
+  const yourColor = color === 'random' ? 'w' : color;
+  // El tablero del menu es el heroe y responde a lo que se elige: la dificultad espesa la
+  // niebla (AC-106) y el color le da la vuelta (AC-708). La ayuda de las minas se lee de el,
+  // para que no haya dos numeros que puedan discrepar.
+  const scene = { ...previewScene(difficulty), flipped: yourColor === 'b' };
+  // Las tiras estan tambien aqui, con el reloj elegido puesto: donde hay tablero, hay mesa.
+  const sides = openingSides(timeControl, yourColor);
+  const { start, end } = mineRowRange(scene.config);
+  const mineRows = Math.max(0, end - start + 1);
 
   const pickColor = (): Color =>
     color === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : color;
 
+  const play = (mode: 'bot' | 'hotseat'): void =>
+    startLocal({ mode, difficulty, botLevel, humanColor: pickColor(), boardSize: BOARD_SIZE });
+
   return (
-    <div className="menu">
-      <header>
-        <img src={MINE_SRC} alt="" className="logo" />
-        <div>
-          <h1>Chess Minesweeper</h1>
-          <p>
-            Ajedrez con minas ocultas en las cuatro filas centrales. Tus piezas van destapando el
-            tablero; la que pise una mina se lleva por delante todo lo que tenga alrededor.
-          </p>
-        </div>
-      </header>
+    <div className="app-body">
+      <div className="stage">
+        <TableView {...sides}>
+          <BoardView scene={scene} />
+        </TableView>
+        <p className="stage-caption">
+          <strong>{scene.config.mineCount} minas</strong> escondidas en las {mineRows} filas
+          del medio. La pieza que pise una se lleva por delante todo lo que tenga alrededor.
+        </p>
+      </div>
 
-      {error && <div className="panel error">{error}</div>}
+      <div className="rail">
+        {error && <div className="panel error">{error}</div>}
 
-      {savedSeat && (
-        <section>
-          <h2>Tenes una partida sin terminar</h2>
-          <p className="hint">
-            Sala <code>{savedSeat.code}</code>. Volves a tu asiento con la posicion como la
-            dejaste. Si tardas demasiado, tu rival gana por abandono.
-          </p>
-          <button className="primary" onClick={() => resumeOnline()}>
-            Volver a mi partida
+        {/* AC-1004: se ofrece nada mas abrir el menu, arriba de todo y sin elegir nada
+            antes. Estaba enterrado bajo la opcion de crear una sala nueva: para encontrar
+            como volver habia que empezar por irse. */}
+        {savedSeat && (
+          <div className="panel resume">
+            <span className="label">Tenes una partida sin terminar</span>
+            <button className="primary" onClick={() => resumeOnline()}>
+              Volver a mi partida
+            </button>
+            <small>
+              Sala <code>{savedSeat.code}</code>. Volves con la posicion como la dejaste. Si
+              tardas demasiado, gana tu rival por abandono.
+            </small>
+          </div>
+        )}
+
+        <label className="field">
+          <span className="label">Reloj</span>
+          <select
+            value={timeControl}
+            onChange={(e) => setTimeControl(e.target.value as TimeControl)}
+          >
+            {TIME_OPTIONS.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.hint ? `${t.label} — ${t.hint}` : t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {/* Una sola primaria (AC-301). Dice lo que hace y no promete un rival que no hay:
+            esto crea una sala y te da un codigo, no te empareja con nadie (AC-304). */}
+        <button
+          className="start"
+          onClick={() =>
+            hostOnline({ difficulty, boardSize: BOARD_SIZE, hostColor: color, timeControl })
+          }
+        >
+          Crear sala
+        </button>
+        <p className="hint start-hint">Te damos un codigo para pasarle a tu rival.</p>
+
+        <div className="alt">
+          <button className="alt-action" onClick={() => setJoining((v) => !v)}>
+            <strong>Entrar con un codigo</strong>
+            <small>Si tu rival ya creo la sala</small>
           </button>
-        </section>
-      )}
 
-      <section>
-        <h2>Modo de juego</h2>
-        <div className="options">
-          {MODES.map((m) => (
+          {joining && (
+            <div className="join-row">
+              <input
+                autoFocus
+                placeholder="CODIGO"
+                value={joinCode}
+                maxLength={ROOM_CODE_LENGTH}
+                onChange={(e) => setJoinCode(normalizeRoomCode(e.target.value))}
+                onKeyDown={(e) =>
+                  e.key === 'Enter' && isValidRoomCode(joinCode) && joinOnline(joinCode)
+                }
+              />
+              <button disabled={!isValidRoomCode(joinCode)} onClick={() => joinOnline(joinCode)}>
+                Unirse
+              </button>
+            </div>
+          )}
+
+          {/* El boton ES el modo: no se elige uno y despues se pulsa otra cosa. */}
+          {MODES.filter((m) => m.value !== DEFAULT_MODE).map((m) => (
             <button
               key={m.value}
-              className={`option${mode === m.value ? ' active' : ''}`}
-              onClick={() => setMode(m.value)}
+              className="alt-action"
+              onClick={() => play(m.value === 'bot' ? 'bot' : 'hotseat')}
             >
               <strong>{m.label}</strong>
               <small>{m.hint}</small>
             </button>
           ))}
         </div>
-      </section>
 
-      <section>
-        <h2>Cantidad de minas</h2>
-        <div className="options row">
-          {DIFFICULTIES.map((d) => (
-            <button
-              key={d.value}
-              className={`option${difficulty === d.value ? ' active' : ''}`}
-              onClick={() => setDifficulty(d.value)}
-            >
-              <strong>{d.label}</strong>
-              <small>{Math.round(MINE_DENSITY[d.value] * 100)}% de las casillas centrales</small>
-            </button>
-          ))}
-        </div>
-        <p className="hint">
-          {config.mineCount} minas repartidas al azar en las {mineRows} filas centrales.
+        {/* AC-302: abren plegadas y con su valor puesto. Se puede jugar sin abrirlas. */}
+        <details className="tweaks">
+          <summary>Opciones de partida</summary>
+
+          <section>
+            <h2>Cantidad de minas</h2>
+            <div className="options row">
+              {DIFFICULTIES.map((d) => (
+                <button
+                  key={d.value}
+                  className={`option${difficulty === d.value ? ' active' : ''}`}
+                  onClick={() => setDifficulty(d.value)}
+                >
+                  <strong>{d.label}</strong>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h2>Tu color</h2>
+            <div className="options row">
+              {(['w', 'b', 'random'] as const).map((value) => (
+                <button
+                  key={value}
+                  className={`option${color === value ? ' active' : ''}`}
+                  onClick={() => setColor(value)}
+                >
+                  {value === 'random' ? (
+                    <strong>Al azar</strong>
+                  ) : (
+                    <img className="swatch" src={pieceSrc('k', value)} alt="" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h2>Fuerza de la maquina</h2>
+            <div className="options row">
+              {DIFFICULTIES.map((d) => (
+                <button
+                  key={d.value}
+                  className={`option${botLevel === d.value ? ' active' : ''}`}
+                  onClick={() => setBotLevel(d.value)}
+                >
+                  <strong>{d.label}</strong>
+                </button>
+              ))}
+            </div>
+          </section>
+        </details>
+
+        <p className="hint footer-hint">
+          En local, el servidor se levanta con <code>npm run dev:worker</code>.
         </p>
-      </section>
-
-      {mode === 'bot' && (
-        <section>
-          <h2>Fuerza de la maquina</h2>
-          <div className="options row">
-            {DIFFICULTIES.map((d) => (
-              <button
-                key={d.value}
-                className={`option${botLevel === d.value ? ' active' : ''}`}
-                onClick={() => setBotLevel(d.value)}
-              >
-                <strong>{d.label}</strong>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {mode === 'online' && (
-        <section>
-          <h2>Reloj</h2>
-          <div className="options">
-            {TIME_OPTIONS.map((t) => (
-              <button
-                key={t.value}
-                className={`option${timeControl === t.value ? ' active' : ''}`}
-                onClick={() => setTimeControl(t.value)}
-              >
-                <strong>{t.label}</strong>
-                <small>{t.hint}</small>
-              </button>
-            ))}
-          </div>
-          <p className="hint">
-            Con reloj, ausentarse lo detiene: cada jugador tiene 2 minutos de ausencia por
-            partida, y al agotarlos gana el rival.
-          </p>
-        </section>
-      )}
-
-      {mode !== 'hotseat' && (
-        <section>
-          <h2>Tu color</h2>
-          <div className="options row">
-            {(['w', 'b', 'random'] as const).map((value) => (
-              <button
-                key={value}
-                className={`option${color === value ? ' active' : ''}`}
-                onClick={() => setColor(value)}
-              >
-                {value === 'random' ? (
-                  <strong>Al azar</strong>
-                ) : (
-                  <img className="swatch" src={pieceSrc('k', value)} alt="" />
-                )}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section>
-        <h2>Tamano del tablero</h2>
-        <div className="slider-row">
-          <input
-            type="range"
-            min={6}
-            max={12}
-            value={boardSize}
-            onChange={(e) => setBoardSize(Number(e.target.value))}
-          />
-          <span>
-            {boardSize}x{boardSize}
-          </span>
-        </div>
-        <p className="hint">Para pruebas de balance. Las partidas normales se juegan en 8x8.</p>
-      </section>
-
-      {mode === 'online' ? (
-        <section className="online-actions">
-          <button
-            className="primary"
-            onClick={() => hostOnline({ difficulty, boardSize, hostColor: color, timeControl })}
-          >
-            Crear sala
-          </button>
-          <div className="join-row">
-            <input
-              placeholder="Codigo de sala"
-              value={joinCode}
-              maxLength={ROOM_CODE_LENGTH}
-              // Se normaliza al escribir, no al enviar: asi lo que se ve en la caja es
-              // exactamente lo que se va a mandar, y el boton no miente sobre si vale.
-              onChange={(e) => setJoinCode(normalizeRoomCode(e.target.value))}
-              onKeyDown={(e) => e.key === 'Enter' && isValidRoomCode(joinCode) && joinOnline(joinCode)}
-            />
-            <button disabled={!isValidRoomCode(joinCode)} onClick={() => joinOnline(joinCode)}>
-              Unirse
-            </button>
-          </div>
-          <p className="hint">
-            Crea una sala y pasale el codigo a tu rival. En local, el servidor se levanta con{' '}
-            <code>npm run dev:worker</code>.
-          </p>
-        </section>
-      ) : (
-        <button
-          className="primary"
-          onClick={() =>
-            startLocal({
-              mode: mode === 'bot' ? 'bot' : 'hotseat',
-              difficulty,
-              botLevel,
-              humanColor: pickColor(),
-              boardSize,
-            })
-          }
-        >
-          Jugar
-        </button>
-      )}
+      </div>
     </div>
   );
 }

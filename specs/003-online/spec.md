@@ -296,8 +296,15 @@ absurdos. Lo que sigue los hace excluyentes: con los dos jugadores presentes man
 con alguien ausente, el reloj se para y corre la ausencia.
 
 - **AC-1401** El control de tiempo se elige al crear la sala y viaja con el resto de los
-  parametros. "Sin reloj" es una opcion y es la de por defecto: es lo que hacen hoy todas
-  las partidas, y anadir un reloj no puede cambiarle la partida a quien no lo pidio.
+  parametros. Si no viene, la sala se crea SIN reloj: `parseIntent` y `createRoom` caen en
+  `'none'`, nunca en un control cualquiera. Anadir un reloj no puede cambiarle la partida a
+  quien no lo pidio, y quien no lo pide es, sobre todo, un cliente viejo que ni sabe que el
+  campo existe.
+  Este criterio decia tambien que "Sin reloj" era lo que el menu ofrecia marcado de entrada.
+  Ya no: el menu propone 10+5 y deja "Sin reloj" al final (AC-401 de 004). Eran dos defectos
+  distintos en una sola frase. El del cable protege a quien NO eligio y es el que sostiene
+  este AC; el de la pantalla es una propuesta a quien SI esta eligiendo, y era el statu quo
+  de cuando el reloj todavia no existia. Solo el primero es una garantia.
 - **AC-1402** El reloj lo lleva el servidor. El cliente dibuja lo que le llega y nunca decide
   que se acabo el tiempo. Misma razon que las minas: lo que decide el cliente, el cliente lo
   puede mentir.

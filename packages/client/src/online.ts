@@ -210,8 +210,11 @@ export function drawButton(offer: {
   // antes de volver a ofrecer no impide decir que si: son cosas distintas.
   if (offer.theirs) return { label: 'Aceptar tablas', action: 'accept', disabled: false };
   if (offer.mine) return { label: 'Tablas ofrecidas', action: 'offer', disabled: true };
+  // Armada, el boton dice lo que hace al pulsarlo, no en que estado esta: para eso ya se
+  // pinta como accion principal. "Tablas con tu jugada" era un hecho en un sitio donde hay
+  // que decidir, y no se distingue de un boton que informa.
   if (offer.armed) {
-    return { label: 'Tablas con tu jugada', action: 'disarm', disabled: false };
+    return { label: 'Cancelar la oferta', action: 'disarm', disabled: false };
   }
   // Un boton que se apaga sin explicarse no se distingue de uno roto: dice lo que falta.
   if (offer.movesLeft > 0) {
@@ -222,7 +225,7 @@ export function drawButton(offer: {
   // jugada para caer en el tiempo del rival (AC-1413); fuera de turno se manda suelta,
   // que FIDE tambien permite.
   if (offer.yourTurn) {
-    return { label: 'Ofrecer con tu jugada', action: 'arm', disabled: false };
+    return { label: 'Ofrecer tablas al mover', action: 'arm', disabled: false };
   }
   return { label: 'Ofrecer tablas', action: 'offer', disabled: false };
 }

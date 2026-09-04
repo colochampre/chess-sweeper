@@ -24,6 +24,8 @@ import {
   createRoom,
   forfeitAbsent,
   generateRoomCode,
+  matchKey,
+  resolveMatch,
   PROTOCOL_STALE_MESSAGE,
   isOriginAllowed,
   isProtocolCurrent,
@@ -48,12 +50,16 @@ import {
   type ClientMessage,
   type Color,
   type GameEvent,
+  type MatchOutcome,
+  type QueueEntry,
   type RoomState,
   type ServerMessage,
 } from '@cm/engine';
 
 export interface Env {
   ROOMS: DurableObjectNamespace;
+  /** La cola de emparejamiento. Un solo objeto para todo el servicio. */
+  QUEUE: DurableObjectNamespace;
   ASSETS: Fetcher;
   /** Origenes permitidos, separados por comas. Sin definir: solo el propio host. */
   ALLOWED_ORIGINS?: string;
@@ -112,11 +118,42 @@ function originAllowed(request: Request, env: Env): boolean {
  * objeto y el parametro que este lee, asi que no pueden diferir. Se construye una peticion
  * nueva en cada llamada, porque el bucle de colisiones puede reintentar.
  */
-function roomStub(env: Env, code: string, request: Request): Promise<Response> {
+function roomStub(
+  env: Env,
+  code: string,
+  request: Request,
+  overrides: Record<string, string> = {},
+): Promise<Response> {
   const url = new URL(request.url);
   url.searchParams.set('code', code);
+  for (const [name, value] of Object.entries(overrides)) url.searchParams.set(name, value);
   const stub = env.ROOMS.get(env.ROOMS.idFromName(code));
   return stub.fetch(new Request(url.toString(), { method: request.method, headers: request.headers }));
+}
+
+/** La cola vive en un unico objeto para todo el servicio. */
+const QUEUE_NAME = 'matchmaking';
+
+function queueStub(env: Env, params: Record<string, string>): Promise<Response> {
+  const url = new URL('https://queue/');
+  for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
+  return env.QUEUE.get(env.QUEUE.idFromName(QUEUE_NAME)).fetch(url.toString());
+}
+
+/** Crea una sala nueva probando codigos hasta que uno este libre. */
+async function createRoomStub(
+  env: Env,
+  request: Request,
+  overrides: Record<string, string> = {},
+): Promise<{ response: Response; code: string } | null> {
+  // Con mil millones de codigos posibles la colision es rarisima, pero es barato
+  // comprobarlo: la sala responde 409 si ya existe y se prueba con otro.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateRoomCode();
+    const response = await roomStub(env, code, request, overrides);
+    if (response.status !== 409) return { response, code };
+  }
+  return null;
 }
 
 export default {
@@ -140,15 +177,33 @@ export default {
     const intent = parseIntent(url.searchParams);
     if (intent === null) return new Response('Parametros de conexion invalidos', { status: 400 });
 
-    if (intent.a === 'create') {
-      // Con mil millones de codigos posibles la colision es rarisima, pero es barato
-      // comprobarlo: la sala responde 409 si ya existe y se prueba con otro.
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const code = generateRoomCode();
-        const response = await roomStub(env, code, request);
+    // `match` se resuelve aqui a una de las dos acciones de siempre, y por eso tiene que
+    // ser antes del apreton de manos: con `match` no hay codigo que mirar todavia, y hay
+    // que saber a que objeto mandar la conexion (AC-202 de 005).
+    if (intent.a === 'match') {
+      const key = matchKey(intent);
+      const claimed = (await queueStub(env, { op: 'claim', key }).then((r) =>
+        r.json(),
+      )) as MatchOutcome;
+
+      if (claimed.a === 'join') {
+        // `match=1` pide una respuesta enrutable en vez de un rechazo por el socket: si la
+        // sala ya no admite a nadie no es un error del jugador, es que hay que crear otra.
+        const response = await roomStub(env, claimed.code, request, { a: 'join', match: '1' });
         if (response.status !== 409) return response;
       }
-      return new Response('No se pudo crear la sala', { status: 503 });
+
+      const created = await createRoomStub(env, request, { a: 'create' });
+      if (created === null) return new Response('No se pudo crear la sala', { status: 503 });
+      // Quien no encontro rival se queda esperando por sus ajustes.
+      await queueStub(env, { op: 'offer', key, code: created.code });
+      return created.response;
+    }
+
+    if (intent.a === 'create') {
+      const created = await createRoomStub(env, request);
+      if (created === null) return new Response('No se pudo crear la sala', { status: 503 });
+      return created.response;
     }
 
     return roomStub(env, intent.code, request);
@@ -304,6 +359,18 @@ export class Room implements DurableObject {
     return refuseSocket(message);
   }
 
+  /**
+   * Da de baja esta sala de la cola de emparejamiento (AC-401 de 005).
+   *
+   * Lo hace el objeto y no `room.ts`: aqui es donde vive el pegamento —los sockets, la
+   * hibernacion, las alarmas— y la logica de sala sigue sin saber que existe una cola, igual
+   * que no sabe que existen los WebSockets.
+   */
+  private async dropFromQueue(): Promise<void> {
+    if (this.room === null) return;
+    await queueStub(this.env, { op: 'drop', code: this.room.code });
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const intent = parseIntent(url.searchParams);
@@ -316,13 +383,24 @@ export class Room implements DurableObject {
       this.room = createRoom(code, intent);
     }
 
-    if (this.room === null) return this.refuse('No existe ninguna sala con ese codigo');
+    // Un emparejamiento que llega a una sala que ya no existe, o que ya se lleno, no es un
+    // error del jugador: se contesta con un estado que el enrutado pueda leer para crear
+    // otra, en vez de un rechazo por el socket que el jugador no puede arreglar (AC-402).
+    const routable = url.searchParams.get('match') === '1';
+    const unavailable = (): Response => new Response('Sala no disponible', { status: 409 });
+
+    if (this.room === null) {
+      return routable ? unavailable() : this.refuse('No existe ninguna sala con ese codigo');
+    }
 
     const seat =
       intent.a === 'resume'
         ? resumeSeat(this.room, intent.token)
         : takeSeat(this.room);
-    if (isRoomError(seat)) return this.refuse(seat.error);
+    if (isRoomError(seat)) return routable ? unavailable() : this.refuse(seat.error);
+
+    // La sala acaba de llenarse: deja de estar disponible para el siguiente que pida rival.
+    if (routable) await this.dropFromQueue();
 
     // Una sesion nueva en el mismo asiento echa a la anterior.
     const previous = this.socketFor(seat.color);
@@ -490,6 +568,9 @@ export class Room implements DurableObject {
   async webSocketClose(ws: WebSocket): Promise<void> {
     const attachment = this.attachmentOf(ws);
     if (attachment === null || this.room === null) return;
+    // Quien esperaba rival deja de estar disponible ahora, no cuando caduque la entrada
+    // (AC-301 y AC-302 de 005). Si la sala ya estaba llena, esto no encuentra nada.
+    await this.dropFromQueue();
     // Si esta conexion ya habia sido reemplazada por otra, su cierre no significa nada.
     this.recent.delete(attachment.session);
     if (!markDisconnected(this.room, attachment.color, attachment.session)) return;
@@ -528,5 +609,55 @@ export class Room implements DurableObject {
     }
     this.room = null;
     await this.ctx.storage.deleteAll();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Durable Object: la cola de emparejamiento.
+// ---------------------------------------------------------------------------
+
+/**
+ * Un unico objeto para todo el servicio, con una entrada por combinacion de ajustes: la sala
+ * que esta esperando rival (AC-103 de 005).
+ *
+ * Es diminuto a proposito. No guarda partidas ni jugadores, solo a que sala mandar al
+ * siguiente que pida esos ajustes, y las salas siguen sin saber que existe.
+ */
+export class Queue implements DurableObject {
+  constructor(private readonly ctx: DurableObjectState) {}
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const key = url.searchParams.get('key') ?? '';
+    const code = url.searchParams.get('code') ?? '';
+
+    switch (url.searchParams.get('op')) {
+      case 'claim': {
+        const entry = (await this.ctx.storage.get<QueueEntry>(key)) ?? null;
+        // Se borra se entregue o no: una entrada se reclama UNA vez. Dos jugadores que
+        // piden a la vez no pueden llevarse la misma sala, y el almacenamiento del objeto
+        // es de un solo hilo, asi que esto no necesita mas cerrojo que el que ya tiene.
+        if (entry !== null) await this.ctx.storage.delete(key);
+        return Response.json(resolveMatch(entry, Date.now()) satisfies MatchOutcome);
+      }
+
+      case 'offer': {
+        await this.ctx.storage.put(key, { code, since: Date.now() } satisfies QueueEntry);
+        return new Response(null, { status: 204 });
+      }
+
+      case 'drop': {
+        // Por codigo y no por clave: la sala no guarda con que ajustes se creo, y el mapa
+        // tiene como mucho una entrada por combinacion.
+        const all = await this.ctx.storage.list<QueueEntry>();
+        for (const [entryKey, entry] of all) {
+          if (entry.code === code) await this.ctx.storage.delete(entryKey);
+        }
+        return new Response(null, { status: 204 });
+      }
+
+      default:
+        return new Response('Operacion desconocida', { status: 400 });
+    }
   }
 }

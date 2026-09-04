@@ -13,7 +13,7 @@ import { isTimeControl, type TimeControl } from './clock.js';
  * suya: si fuera solo un numero documentado, un cliente viejo contra un servidor nuevo no se
  * rechazaria, se rompería raro. Se sube cada vez que cambian `ClientMessage` o `ServerMessage`.
  */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 /** Parametro de la query donde viaja la version. */
 export const PROTOCOL_PARAM = 'v';
@@ -44,6 +44,12 @@ export interface RoomSettings {
  */
 export type ConnectIntent =
   | ({ a: 'create' } & RoomSettings)
+  /**
+   * Pedir rival. Se resuelve a `create` o a `join` en el enrutado y antes del apreton de
+   * manos (AC-202 de 005): con `match` todavia no hay codigo que mirar, y el Worker tiene
+   * que saber a que Durable Object mandar la conexion antes de aceptarla.
+   */
+  | ({ a: 'match' } & RoomSettings)
   | { a: 'join'; code: string }
   | { a: 'resume'; code: string; token: string };
 
@@ -127,7 +133,9 @@ export function intentToQuery(intent: ConnectIntent): string {
 export function parseIntent(params: URLSearchParams): ConnectIntent | null {
   const a = params.get('a');
 
-  if (a === 'create') {
+  // `create` y `match` piden lo mismo: los ajustes de la sala. `match` no trae codigo
+  // porque todavia no hay ninguno, y por eso se valida igual que `create`.
+  if (a === 'create' || a === 'match') {
     const difficulty = params.get('difficulty');
     const hostColor = params.get('hostColor');
     const boardSize = Number(params.get('boardSize'));
@@ -137,7 +145,7 @@ export function parseIntent(params: URLSearchParams): ConnectIntent | null {
     // Sin control de tiempo se juega sin reloj, que es lo que hacian todas las salas.
     const timeControl = params.get('timeControl') ?? 'none';
     if (!isTimeControl(timeControl)) return null;
-    return { a: 'create', difficulty, boardSize, hostColor, timeControl };
+    return { a, difficulty, boardSize, hostColor, timeControl };
   }
 
   const code = normalizeRoomCode(params.get('code') ?? '');

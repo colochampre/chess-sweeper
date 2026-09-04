@@ -817,6 +817,16 @@ button.danger:hover:not(:disabled) {
   letter-spacing: 0.2em;
   text-transform: uppercase;
 }
+/*
+ * El estilo del input esta pensado para que un codigo se lea como un codigo: mayusculas y
+ * muy espaciado. El texto de ayuda es una frase, y con ese mismo estilo no entraria en el
+ * riel, asi que se le quita a el y solo a el.
+ */
+.join-row input::placeholder {
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
 .room-code {
   display: flex;
   flex-direction: column;
@@ -879,4 +889,10 @@ button.danger:hover:not(:disabled) {
 }
 .counter.stall.close {
   color: #d9a441;
+}
+
+/* Buscando rival no hay codigo que ensenar: los puntos ocupan su sitio sin fingir uno. */
+.room-code.searching strong {
+  color: var(--muted);
+  letter-spacing: 0.18em;
 }

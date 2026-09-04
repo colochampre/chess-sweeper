@@ -5,6 +5,7 @@ export * from './rng.js';
 export * from './minefield.js';
 export * from './reveal.js';
 export * from './repetition.js';
+export * from './matchmaking.js';
 export * from './path.js';
 export * from './moves.js';
 export * from './legality.js';

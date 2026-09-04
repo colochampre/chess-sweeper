@@ -12,13 +12,20 @@
     "not_found_handling": "single-page-application"
   },
 
-  // Una sala = un Durable Object, direccionado por su codigo.
+  // Una sala = un Durable Object, direccionado por su codigo. Y un unico objeto mas para
+  // la cola de emparejamiento, que solo guarda que sala espera por cada combinacion.
   "durable_objects": {
-    "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+    "bindings": [
+      { "name": "ROOMS", "class_name": "Room" },
+      { "name": "QUEUE", "class_name": "Queue" }
+    ]
   },
 
   // Respaldo SQLite: es el que esta disponible en el plan gratuito.
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Room"] },
+    { "tag": "v2", "new_sqlite_classes": ["Queue"] }
+  ],
 
   "observability": { "enabled": true }
 }

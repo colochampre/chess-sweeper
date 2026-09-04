@@ -30,12 +30,11 @@ import {
 const BOARD_SIZE = DEFAULT_CONFIG.files;
 
 export function Menu() {
-  const { startLocal, hostOnline, joinOnline, resumeOnline, error } = useGame();
+  const { startLocal, hostOnline, matchOnline, joinOnline, resumeOnline, error } = useGame();
   const [difficulty, setDifficulty] = useState<Difficulty>(DEFAULT_DIFFICULTY);
   const [botLevel, setBotLevel] = useState<Difficulty>(DEFAULT_BOT_LEVEL);
   const [color, setColor] = useState<Color | 'random'>(DEFAULT_COLOR);
   const [timeControl, setTimeControl] = useState<TimeControl>(DEFAULT_TIME_CONTROL);
-  const [joining, setJoining] = useState(false);
   const [joinCode, setJoinCode] = useState('');
 
   const savedSeat = loadSeat();
@@ -101,41 +100,53 @@ export function Menu() {
           </select>
         </label>
 
-        {/* Una sola primaria (AC-301). Dice lo que hace y no promete un rival que no hay:
-            esto crea una sala y te da un codigo, no te empareja con nadie (AC-304). */}
+        {/* Una sola primaria (AC-301 de 004), y ahora dice lo que hace de verdad: hay un
+            rival del otro lado. Esto CORRIGE AC-304, que prohibia prometerlo — tenia razon
+            cuando la unica accion era crear una sala y esperar a que alguien apareciese con
+            un codigo (AC-503 de 005). */}
         <button
           className="start"
           onClick={() =>
-            hostOnline({ difficulty, boardSize: BOARD_SIZE, hostColor: color, timeControl })
+            matchOnline({ difficulty, boardSize: BOARD_SIZE, hostColor: color, timeControl })
           }
         >
-          Crear sala
+          Empezar partida
         </button>
-        <p className="hint start-hint">Te damos un codigo para pasarle a tu rival.</p>
+        <p className="hint start-hint">Te buscamos un rival.</p>
 
         <div className="alt">
-          <button className="alt-action" onClick={() => setJoining((v) => !v)}>
-            <strong>Entrar con un codigo</strong>
-            <small>Si tu rival ya creo la sala</small>
+          <button
+            className="alt-action"
+            onClick={() =>
+              hostOnline({ difficulty, boardSize: BOARD_SIZE, hostColor: color, timeControl })
+            }
+          >
+            <strong>Jugar con un amigo</strong>
+            <small>Te damos un codigo para pasarle</small>
           </button>
 
-          {joining && (
-            <div className="join-row">
-              <input
-                autoFocus
-                placeholder="CODIGO"
-                value={joinCode}
-                maxLength={ROOM_CODE_LENGTH}
-                onChange={(e) => setJoinCode(normalizeRoomCode(e.target.value))}
-                onKeyDown={(e) =>
-                  e.key === 'Enter' && isValidRoomCode(joinCode) && joinOnline(joinCode)
-                }
-              />
-              <button disabled={!isValidRoomCode(joinCode)} onClick={() => joinOnline(joinCode)}>
-                Unirse
-              </button>
-            </div>
-          )}
+          {/* El propio control dice lo que pide, sin etiqueta aparte: el sitio donde se
+              escribe el codigo es la explicacion (AC-305). El aria-label existe porque un
+              placeholder NO es una etiqueta —se va al escribir y no se anuncia igual—, y
+              ::placeholder lleva su propio estilo porque el del input esta pensado para que
+              un codigo se lea como un codigo, no para una frase. */}
+          <div className="join-row">
+            <input
+              placeholder="Entrar con un codigo"
+              aria-label="Entrar con un codigo"
+              value={joinCode}
+              maxLength={ROOM_CODE_LENGTH}
+              // AC-1006: se normaliza al escribir, no al enviar, asi lo que se ve en la
+              // caja es exactamente lo que se va a mandar y el boton no miente.
+              onChange={(e) => setJoinCode(normalizeRoomCode(e.target.value))}
+              onKeyDown={(e) =>
+                e.key === 'Enter' && isValidRoomCode(joinCode) && joinOnline(joinCode)
+              }
+            />
+            <button disabled={!isValidRoomCode(joinCode)} onClick={() => joinOnline(joinCode)}>
+              Unirse
+            </button>
+          </div>
 
           {/* El boton ES el modo: no se elige uno y despues se pulsa otra cosa. */}
           {MODES.filter((m) => m.value !== DEFAULT_MODE).map((m) => (

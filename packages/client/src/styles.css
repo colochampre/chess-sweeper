@@ -880,3 +880,9 @@ button.danger:hover:not(:disabled) {
 .counter.stall.close {
   color: #d9a441;
 }
+
+/* Buscando rival no hay codigo que ensenar: los puntos ocupan su sitio sin fingir uno. */
+.room-code.searching strong {
+  color: var(--muted);
+  letter-spacing: 0.18em;
+}

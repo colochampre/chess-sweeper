@@ -60,6 +60,12 @@ export interface LocalOptions {
 
 export interface OnlineInfo {
   code: string | null;
+  /**
+   * Se esta buscando rival por emparejamiento. El lobby lo usa para decir que busca en vez
+   * de ensenar el codigo: ensenarlo invitaria a compartirlo, que es la otra manera de jugar
+   * y no es esta (AC-501 de 005).
+   */
+  searching: boolean;
   connected: boolean;
   opponentConnected: boolean;
   waiting: boolean;
@@ -132,6 +138,8 @@ interface AppState {
   startLocal: (options: LocalOptions) => void;
   restart: (overrides?: Partial<GameConfig>, seed?: number) => void;
   hostOnline: (settings: RoomSettings) => void;
+  /** Pedir rival: el servidor te sienta con quien pidio lo mismo, o te deja esperando. */
+  matchOnline: (settings: RoomSettings) => void;
   joinOnline: (code: string) => void;
   resumeOnline: () => boolean;
   rematchOnline: () => void;
@@ -383,6 +391,7 @@ export const useGame = create<AppState>((set, get) => {
     flags: [],
     online: {
         code: null,
+        searching: false,
         connected: false,
         opponentConnected: false,
         waiting: false,
@@ -438,6 +447,7 @@ export const useGame = create<AppState>((set, get) => {
         flags: new Array<boolean>(engine.board.length).fill(false),
         online: {
         code: null,
+        searching: false,
         connected: false,
         opponentConnected: false,
         waiting: false,
@@ -485,8 +495,26 @@ export const useGame = create<AppState>((set, get) => {
         error: null,
         difficulty: settings.difficulty,
         timeControl: settings.timeControl ?? 'none',
+        online: { ...get().online, searching: false },
       });
       ensureSocket().connect({ a: 'create', ...settings });
+    },
+
+    /**
+     * Pedir rival. Por el cable es lo mismo que crear salvo la accion: el servidor decide si
+     * hay alguien esperando con estos ajustes o si hay que crear una sala nueva (AC-201 de
+     * 005), y el cliente no se entera de cual de las dos ocurrio.
+     */
+    matchOnline: (settings) => {
+      set({
+        screen: 'lobby',
+        mode: 'online',
+        error: null,
+        difficulty: settings.difficulty,
+        timeControl: settings.timeControl ?? 'none',
+        online: { ...get().online, searching: true },
+      });
+      ensureSocket().connect({ a: 'match', ...settings });
     },
 
     joinOnline: (code) => {
@@ -554,6 +582,7 @@ export const useGame = create<AppState>((set, get) => {
         targets: [],
         online: {
         code: null,
+        searching: false,
         connected: false,
         opponentConnected: false,
         waiting: false,

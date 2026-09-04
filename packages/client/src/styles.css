@@ -202,6 +202,10 @@ button.danger:hover:not(:disabled) {
   line-height: 1.45;
 }
 
+/* Cuatro opciones cortas: entran en una fila sin apretarse. */
+.field .options {
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+}
 .field .label {
   display: block;
   font-size: 0.72rem;
@@ -209,26 +213,6 @@ button.danger:hover:not(:disabled) {
   letter-spacing: 0.07em;
   color: var(--muted);
   margin-bottom: 0.3rem;
-}
-/* Un desplegable, no cuatro tarjetas: el control de tiempo es una eleccion, no una seccion. */
-.field select {
-  width: 100%;
-  font: inherit;
-  color: var(--text);
-  background-color: var(--bg-soft);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 0.6rem 2.1rem 0.6rem 0.75rem;
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%239b958c' stroke-width='1.8' stroke-linecap='round'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  /* Sin esto el SVG no tiene tamano intrinseco y se estira hasta llenar la caja entera. */
-  background-size: 11px 7px;
-}
-.field select:hover {
-  border-color: #56524d;
 }
 
 /*

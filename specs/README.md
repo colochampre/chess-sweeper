@@ -24,7 +24,7 @@ abajo contase 003 de menos durante meses, dejandose fuera `origin.test.ts` y
 | [001-core-rules](001-core-rules/spec.md) | Tablero, minas, revelado, trayecto, explosiones, fin de partida, tablas, eventos, informacion oculta | `@cm/engine` | 56 |
 | [002-ai](002-ai/spec.md) | Creencia sobre las minas, riesgo por movimiento, niveles de dificultad | `@cm/ai` | 21 |
 | [003-online](003-online/spec.md) | Salas, autoridad, reconexion, parametros de conexion, Durable Objects, origenes, transporte, abandono, revancha, tablas, reloj | `@cm/engine` + `@cm/worker` + `@cm/server` | 134 |
-| [004-interfaz](004-interfaz/spec.md) | Tablero del menu, tablero sin estado, una accion primaria, lo que el menu propone, armazon comun, HUD, tiras de jugador, contador sin avance | `@cm/client` | 18 |
+| [004-interfaz](004-interfaz/spec.md) | Tablero del menu, tablero sin estado, una accion primaria, lo que el menu propone, armazon comun, HUD, tiras de jugador, contador sin avance | `@cm/client` | 19 |
 | [005-emparejamiento](005-emparejamiento/spec.md) | La cola, emparejar se resuelve a crear o entrar, salir de la cola, entradas caducas | `@cm/engine` + `@cm/worker` + `@cm/server` | 11 |
 
 ## Como anadir una feature

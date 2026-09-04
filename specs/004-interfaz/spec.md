@@ -76,8 +76,10 @@ El menu abria en "Sin reloj" porque era lo que hacian todas las partidas el dia 
 escribio FR-14: el reloj no existia todavia. Ya existe, y un menu que propone la opcion de no
 usarlo esta proponiendo la de antes.
 
-- **AC-401** El control de tiempo abre en 10+5, y "Sin reloj" es la ultima opcion de la lista.
-  Sigue estando entera: proponer no es imponer, y quien no quiera reloj lo apaga en un clic.
+- **AC-401** El control de tiempo abre en 10 min, y "Sin reloj" es la ultima opcion. Sigue
+  estando: proponer no es imponer, y quien no quiera reloj lo elige en un clic. Son cuatro
+  —5 min, 10 min, 1 h y Sin reloj— y se ofrecen como BOTONES y no como desplegable: caben a
+  la vista, asi que esconderlas detras de un clic solo anadia un paso para leer lo mismo.
 - **AC-402** El valor por defecto de cada lista del menu es una constante con nombre, no "el
   primero del array". Reordenar una lista es una decision de maquetado; cambiar lo que viene
   marcado es una decision de producto. Atadas, la primera hacia la segunda en silencio, que es
@@ -85,14 +87,15 @@ usarlo esta proponiendo la de antes.
 - **AC-403** Lo que el menu propone no toca lo que el servidor asume. Un `create` sin control
   de tiempo sigue creando una sala sin reloj (AC-1401 de 003): el defecto de la pantalla y el
   del cable son dos cosas, y solo el segundo es una garantia.
-- **AC-404** La ayuda de cada control de tiempo dice los MINUTOS y no el incremento. La
-  notacion ya lo lleva —eso es lo que significa el `+2`—, asi que escribirlo tambien en
-  palabras alarga cada linea del desplegable para contar dos veces lo mismo. "5+2 — 5 min"
-  dice lo que hay que decidir; "5 min y 2 s por jugada" dice ademas lo que ya estaba escrito.
-  "Sin reloj" no lleva ayuda: se explica solo.
+- **AC-404** Cada boton dice los minutos, y lo que dice es cierto: los controles que ofrece el
+  menu NO llevan incremento. Un boton que dijese "10 min" sobre un control de 10+5 sumaria
+  cinco segundos por jugada, y la partida duraria bastante mas de diez minutos: seria la misma
+  clase de mentira que AC-304 prohibe en la accion primaria.
+  El motor sigue teniendo los controles con incremento y el cable los sigue aceptando; lo que
+  no hace el menu es ofrecerlos con una etiqueta que no los describe.
 
-De AC-401 a AC-403 estan cubiertos en `packages/client/tests/menuOptions.test.ts`. AC-404 es
-texto y se comprueba a mano.
+De AC-401 a AC-404 estan cubiertos en `packages/client/tests/menuOptions.test.ts`. Que se
+dibujen como botones es maquetado y se comprueba a mano.
 
 ## FR-5 · Las tres pantallas son la misma aplicacion
 

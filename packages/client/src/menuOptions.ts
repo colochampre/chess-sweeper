@@ -27,18 +27,18 @@ export const MODES: Option<Mode>[] = [
  * dia que se escribio FR-14 era lo que hacian todas las partidas: el reloj no existia. Ya
  * existe, asi que abrir en "Sin reloj" es proponer la version de antes del reloj.
  *
- * La ayuda dice los minutos y no el incremento: la notacion ya lo lleva —eso es lo que
- * significa el `+2`— y escribirlo tambien en palabras alarga cada linea del desplegable para
- * contar dos veces lo mismo (AC-404).
+ * Son controles SIN incremento a proposito. La etiqueta dice "10 min" y tiene que ser cierta:
+ * con 10+5 sumarias cinco segundos por jugada y una partida de "10 min" duraria bastante mas
+ * (AC-404). El que quiera incremento pide una sala por codigo; el conjunto del motor los
+ * sigue teniendo todos.
  *
- * Que el menu proponga 10+5 no cambia lo que asume el servidor: un `create` sin control de
+ * Que el menu proponga 10+0 no cambia lo que asume el servidor: un `create` sin control de
  * tiempo sigue creando una sala sin reloj (AC-403, y AC-1401 de 003).
  */
 export const TIME_OPTIONS: Option<TimeControl>[] = [
-  { value: '5+2', label: '5+2', hint: '5 min' },
-  { value: '10+5', label: '10+5', hint: '10 min' },
-  { value: '15+10', label: '15+10', hint: '15 min' },
-  // Sin ayuda: "Sin reloj" ya dice todo lo que hay que decir de si mismo.
+  { value: '5+0', label: '5 min' },
+  { value: '10+0', label: '10 min' },
+  { value: '60+0', label: '1 h' },
   { value: 'none', label: 'Sin reloj' },
 ];
 
@@ -53,7 +53,7 @@ export const DIFFICULTIES: Option<Difficulty>[] = [
 ];
 
 export const DEFAULT_MODE: Mode = 'online';
-export const DEFAULT_TIME_CONTROL: TimeControl = '10+5';
+export const DEFAULT_TIME_CONTROL: TimeControl = '10+0';
 export const DEFAULT_DIFFICULTY: Difficulty = 'normal';
 export const DEFAULT_BOT_LEVEL: Difficulty = 'normal';
 /**

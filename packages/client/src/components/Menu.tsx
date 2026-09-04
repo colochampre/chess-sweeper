@@ -86,19 +86,22 @@ export function Menu() {
           </div>
         )}
 
-        <label className="field">
+        {/* Botones y no un desplegable: son cuatro opciones cortas y caben a la vista, asi
+            que esconderlas detras de un clic solo anadia un paso para leer lo mismo. */}
+        <section className="field">
           <span className="label">Reloj</span>
-          <select
-            value={timeControl}
-            onChange={(e) => setTimeControl(e.target.value as TimeControl)}
-          >
+          <div className="options">
             {TIME_OPTIONS.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.hint ? `${t.label} — ${t.hint}` : t.label}
-              </option>
+              <button
+                key={t.value}
+                className={`option${timeControl === t.value ? ' active' : ''}`}
+                onClick={() => setTimeControl(t.value)}
+              >
+                <strong>{t.label}</strong>
+              </button>
             ))}
-          </select>
-        </label>
+          </div>
+        </section>
 
         {/* Una sola primaria (AC-301 de 004), y ahora dice lo que hace de verdad: hay un
             rival del otro lado. Esto CORRIGE AC-304, que prohibia prometerlo — tenia razon

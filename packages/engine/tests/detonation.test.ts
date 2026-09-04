@@ -60,6 +60,35 @@ describe('FR-5 detonacion en el trayecto', () => {
     expect(on.revealed[sq(on, 'a2')]).toBe(true);
     expect(on.revealed[sq(on, 'a3')]).toBe(true);
   });
+
+  it('AC-505: revelar el trayecto es el defecto, y el caballo sigue sin destapar lo que sobrevuela', () => {
+    // Sin override: lo que se afirma aqui es DEFAULT_CONFIG, que es con lo que se juega. El
+    // defecto anterior no lo afirmaba ningun test, asi que cambiarlo no rompia nada — que es
+    // justo como un defecto se cambia sin querer.
+    const rook = emptyGame();
+    put(rook, 'a1', 'r', 'w');
+    put(rook, 'h1', 'k', 'w');
+    put(rook, 'h8', 'k', 'b');
+    // La mina acota la cascada: deja a2, a3 y a4 con adyacencia 1, asi que si aparecen
+    // reveladas es por el trayecto y no porque el destapado se haya ido por todo el tablero.
+    mine(rook, 'b3');
+    const slid = applyMove(rook, { from: sq(rook, 'a1'), to: sq(rook, 'a4') }).state;
+
+    expect(slid.revealed[sq(slid, 'a2')]).toBe(true);
+    expect(slid.revealed[sq(slid, 'a3')]).toBe(true);
+
+    // El caballo no: su trayecto es solo el destino (AC-402), y lo que sobrevuela sigue
+    // tapado igual que sigue sin detonarlo (AC-502).
+    const knight = emptyGame();
+    put(knight, 'b1', 'n', 'w');
+    put(knight, 'h1', 'k', 'w');
+    put(knight, 'h8', 'k', 'b');
+    mine(knight, 'd4'); // deja c3 con adyacencia 1: aterriza y no cascadea
+    const hopped = applyMove(knight, { from: sq(knight, 'b1'), to: sq(knight, 'c3') }).state;
+
+    expect(hopped.revealed[sq(hopped, 'c3')]).toBe(true);
+    expect(hopped.revealed[sq(hopped, 'c2')]).toBe(false);
+  });
 });
 
 describe('FR-6 explosion y reaccion en cadena', () => {

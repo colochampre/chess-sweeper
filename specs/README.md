@@ -15,7 +15,7 @@ grep -rn "AC-5" packages/*/tests    # que cubre el criterio AC-5xx
 
 | Spec | Alcance | Paquete | Tests |
 |---|---|---|---|
-| [001-core-rules](001-core-rules/spec.md) | Tablero, minas, revelado, trayecto, explosiones, fin de partida, eventos, informacion oculta | `@cm/engine` | 46 |
+| [001-core-rules](001-core-rules/spec.md) | Tablero, minas, revelado, trayecto, explosiones, fin de partida, eventos, informacion oculta | `@cm/engine` | 47 |
 | [002-ai](002-ai/spec.md) | Creencia sobre las minas, riesgo por movimiento, niveles de dificultad | `@cm/ai` | 21 |
 | [003-online](003-online/spec.md) | Salas, autoridad, reconexion, parametros de conexion, Durable Objects, origenes, transporte, abandono, revancha, tablas, reloj | `@cm/engine` + `@cm/worker` + `@cm/server` | 124 |
 

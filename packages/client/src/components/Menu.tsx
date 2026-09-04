@@ -214,10 +214,6 @@ export function Menu() {
             </div>
           </section>
         </details>
-
-        <p className="hint footer-hint">
-          En local, el servidor se levanta con <code>npm run dev:worker</code>.
-        </p>
       </div>
     </div>
   );

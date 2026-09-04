@@ -27,14 +27,19 @@ export const MODES: Option<Mode>[] = [
  * dia que se escribio FR-14 era lo que hacian todas las partidas: el reloj no existia. Ya
  * existe, asi que abrir en "Sin reloj" es proponer la version de antes del reloj.
  *
+ * La ayuda dice los minutos y no el incremento: la notacion ya lo lleva —eso es lo que
+ * significa el `+2`— y escribirlo tambien en palabras alarga cada linea del desplegable para
+ * contar dos veces lo mismo (AC-404).
+ *
  * Que el menu proponga 10+5 no cambia lo que asume el servidor: un `create` sin control de
  * tiempo sigue creando una sala sin reloj (AC-403, y AC-1401 de 003).
  */
 export const TIME_OPTIONS: Option<TimeControl>[] = [
-  { value: '5+2', label: '5+2', hint: '5 min y 2 s por jugada' },
-  { value: '10+5', label: '10+5', hint: '10 min y 5 s por jugada' },
-  { value: '15+10', label: '15+10', hint: '15 min y 10 s por jugada' },
-  { value: 'none', label: 'Sin reloj', hint: 'Sin prisa' },
+  { value: '5+2', label: '5+2', hint: '5 min' },
+  { value: '10+5', label: '10+5', hint: '10 min' },
+  { value: '15+10', label: '15+10', hint: '15 min' },
+  // Sin ayuda: "Sin reloj" ya dice todo lo que hay que decir de si mismo.
+  { value: 'none', label: 'Sin reloj' },
 ];
 
 /**

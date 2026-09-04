@@ -58,12 +58,16 @@ podia existir dentro de una partida en curso.
   opcion se descubria DESPUES de elegirla— y despues una caja con etiqueta aparte, que decia
   lo mismo dos veces. Un control que hay que abrir para saber que pide no explica nada, y el
   sitio donde se escribe el codigo es la explicacion.
+- **AC-306** El menu no lleva notas de desarrollo. Habia una diciendo con que comando se
+  levanta el servidor en local, que es informacion para quien programa esto y no para quien
+  viene a jugar. Vive en el README, en `docs/deploy.md` y en `openspec/config.yaml`: el menu
+  era el cuarto sitio y el unico de cara al jugador.
   Un texto de ayuda dentro de la caja NO es una etiqueta: desaparece al escribir y no se
   anuncia igual, asi que el campo lleva ademas un nombre accesible. Y ese texto lleva su
   propio estilo, porque el de la caja esta pensado para que un codigo se lea como un codigo.
 
-AC-301, AC-302, AC-304 y AC-305 son decisiones de maquetado y de texto: se comprueban a mano,
-igual
+AC-301, AC-302 y de AC-304 a AC-306 son decisiones de maquetado y de texto: se comprueban a
+mano, igual
 que AC-1313 de 003. AC-303 si se puede leer del codigo.
 
 ## FR-4 · El menu propone, no impone
@@ -81,6 +85,14 @@ usarlo esta proponiendo la de antes.
 - **AC-403** Lo que el menu propone no toca lo que el servidor asume. Un `create` sin control
   de tiempo sigue creando una sala sin reloj (AC-1401 de 003): el defecto de la pantalla y el
   del cable son dos cosas, y solo el segundo es una garantia.
+- **AC-404** La ayuda de cada control de tiempo dice los MINUTOS y no el incremento. La
+  notacion ya lo lleva —eso es lo que significa el `+2`—, asi que escribirlo tambien en
+  palabras alarga cada linea del desplegable para contar dos veces lo mismo. "5+2 — 5 min"
+  dice lo que hay que decidir; "5 min y 2 s por jugada" dice ademas lo que ya estaba escrito.
+  "Sin reloj" no lleva ayuda: se explica solo.
+
+De AC-401 a AC-403 estan cubiertos en `packages/client/tests/menuOptions.test.ts`. AC-404 es
+texto y se comprueba a mano.
 
 ## FR-5 · Las tres pantallas son la misma aplicacion
 
@@ -97,6 +109,11 @@ al entrar a jugar. Pasar de una a otra parecia cambiar de aplicacion.
   tres. La ayuda del clic derecho estaba al final del HUD, que es la columna de al lado.
 - **AC-504** El velo de fin de partida se cine al tablero y no a la columna. Con la columna
   mas ancha que el tablero, se salia por el lado.
+- **AC-505** El titulo, el tablero y la ayuda del tablero arrancan en la misma vertical. El
+  tablero se centraba dentro de su columna, que es mas ancha que el, asi que empezaba unos
+  cien pixeles a la derecha del titulo y nada de la pantalla compartia un borde. Se alinea al
+  principio de la columna: la holgura sobrante se va toda a un lado en vez de repartirse en
+  dos margenes que no alinean con nada.
 
 ## FR-6 · El HUD separa lo que decide de lo que solo se mira
 

@@ -111,7 +111,9 @@ button.danger:hover:not(:disabled) {
   --board: min(100%, 780px, calc(100vh - var(--chrome)));
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* Al principio de la columna y no centrado: asi el tablero, su ayuda y el titulo de la
+     cabecera arrancan todos en la misma vertical, que es el borde del contenido. */
+  align-items: flex-start;
 }
 
 /* El tablero se lleva la columna ancha: es lo que se viene a hacer, y esta presente. */
@@ -162,9 +164,8 @@ button.danger:hover:not(:disabled) {
 .rail .actions button {
   padding: 0.7rem 0.9rem;
 }
-/* Al fondo de la columna lo que no decide la partida: preferencias, y la nota de desarrollo. */
-.hud .prefs,
-.rail .footer-hint {
+/* Al fondo de la columna lo que no decide la partida. */
+.hud .prefs {
   margin-top: auto;
 }
 .rail .resume {
@@ -200,7 +201,9 @@ button.danger:hover:not(:disabled) {
   appearance: none;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%239b958c' stroke-width='1.8' stroke-linecap='round'/></svg>");
   background-repeat: no-repeat;
-  background-position: right 0.7rem center;
+  background-position: right 0.75rem center;
+  /* Sin esto el SVG no tiene tamano intrinseco y se estira hasta llenar la caja entera. */
+  background-size: 11px 7px;
 }
 .field select:hover {
   border-color: #56524d;
@@ -286,10 +289,6 @@ button.danger:hover:not(:disabled) {
 }
 .tweaks section {
   margin-top: 1rem;
-}
-.rail .footer-hint {
-  margin-top: 0.4rem;
-  font-size: 0.75rem;
 }
 
 .options {

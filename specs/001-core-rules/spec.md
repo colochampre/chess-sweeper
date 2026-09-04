@@ -70,8 +70,17 @@ completa el movimiento y no captura nada en el destino. El turno pasa igual al r
 - **AC-502** Un caballo cuya casilla intermedia "sobrevolada" tiene mina no la detona; solo
   detona si la mina está en su destino.
 - **AC-503** La pieza que detona siempre muere (está en el centro del área de explosión).
-- **AC-504** Con `revealOnTransit: true` las casillas del trayecto se revelan; con `false`
-  (por defecto) solo se revela la de aterrizaje.
+- **AC-504** Con `revealOnTransit: true` las casillas del trayecto se revelan; con `false`,
+  solo la de aterrizaje.
+- **AC-505** Revelar el trayecto es el **defecto**. Una pieza que cruza cuatro casillas
+  destapa las cuatro: ya paga el riesgo de pisarlas —detona la primera mina que encuentre
+  (AC-501)—, asi que no hay razon para que no vea lo que piso. El caballo queda fuera porque
+  su trayecto es solo el destino (AC-402): no pisa lo que sobrevuela, ni para detonar ni para
+  destapar.
+  Esto cambia el juego y no la presentacion. Las piezas deslizantes barren el tablero al
+  moverse, la informacion se abre mucho mas rapido y una torre pasa a valer mas de lo que
+  valia; `tools/balance` mide otra cosa a partir de aqui. Lo que se cambia es el defecto, no
+  la regla: la regla ya estaba escrita y probada, apagada.
 
 ## FR-6 · Explosión y reacción en cadena
 

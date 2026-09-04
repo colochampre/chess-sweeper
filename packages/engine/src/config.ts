@@ -15,7 +15,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   mineCount: 8,
   explosionRadius: 1,
   chainExplosions: true,
-  revealOnTransit: false,
+  revealOnTransit: true,
   kingImmuneToMines: false,
   seed: 0,
 };

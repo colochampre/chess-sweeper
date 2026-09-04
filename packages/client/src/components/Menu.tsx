@@ -35,7 +35,6 @@ export function Menu() {
   const [botLevel, setBotLevel] = useState<Difficulty>(DEFAULT_BOT_LEVEL);
   const [color, setColor] = useState<Color | 'random'>(DEFAULT_COLOR);
   const [timeControl, setTimeControl] = useState<TimeControl>(DEFAULT_TIME_CONTROL);
-  const [joining, setJoining] = useState(false);
   const [joinCode, setJoinCode] = useState('');
 
   const savedSeat = loadSeat();
@@ -126,18 +125,19 @@ export function Menu() {
             <small>Te damos un codigo para pasarle</small>
           </button>
 
-          <button className="alt-action" onClick={() => setJoining((v) => !v)}>
-            <strong>Entrar con un codigo</strong>
-            <small>Si tu rival ya creo la sala</small>
-          </button>
-
-          {joining && (
+          {/* El propio control dice lo que pide. Antes era un boton que desplegaba la caja
+              al pulsarlo: decia "Entrar con un codigo" sin ensenar ninguno, y que hacia
+              falta uno se descubria despues. Un control que hay que abrir para saber que
+              pide no explica nada (AC-305). */}
+          <div className="field join">
+            <span className="label">Entrar con un codigo</span>
             <div className="join-row">
               <input
-                autoFocus
                 placeholder="CODIGO"
                 value={joinCode}
                 maxLength={ROOM_CODE_LENGTH}
+                // AC-1006: se normaliza al escribir, no al enviar, asi lo que se ve en la
+                // caja es exactamente lo que se va a mandar y el boton no miente.
                 onChange={(e) => setJoinCode(normalizeRoomCode(e.target.value))}
                 onKeyDown={(e) =>
                   e.key === 'Enter' && isValidRoomCode(joinCode) && joinOnline(joinCode)
@@ -147,7 +147,7 @@ export function Menu() {
                 Unirse
               </button>
             </div>
-          )}
+          </div>
 
           {/* El boton ES el modo: no se elige uno y despues se pulsa otra cosa. */}
           {MODES.filter((m) => m.value !== DEFAULT_MODE).map((m) => (

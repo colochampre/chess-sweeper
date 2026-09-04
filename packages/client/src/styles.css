@@ -886,3 +886,8 @@ button.danger:hover:not(:disabled) {
   color: var(--muted);
   letter-spacing: 0.18em;
 }
+
+/* No es un boton, es un control con etiqueta: se separa un poco de los que si lo son. */
+.field.join {
+  margin: 0.35rem 0 0.15rem;
+}

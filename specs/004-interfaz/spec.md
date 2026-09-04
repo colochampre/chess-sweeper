@@ -52,8 +52,14 @@ podia existir dentro de una partida en curso.
   Con el emparejamiento (AC-503 de 005) SI hay rival del otro lado, asi que la primaria pasa
   a ser "Empezar partida" y "Crear sala" baja a secundaria como "Jugar con un amigo". El
   criterio no cambia —la etiqueta sigue teniendo que ser exacta—, cambia lo que es exacto.
+- **AC-305** La caja del codigo y su boton estan a la vista, no detras de un control que hay
+  que abrir. Antes "Entrar con un codigo" era un boton que desplegaba la caja al pulsarlo:
+  decia que hacia falta un codigo sin ensenar donde ponerlo, asi que lo que pide la opcion se
+  descubria DESPUES de elegirla. Un control que hay que abrir para saber que pide no esta
+  explicando nada; el sitio donde se escribe el codigo es la explicacion.
 
-AC-301, AC-302 y AC-304 son decisiones de maquetado y de texto: se comprueban a mano, igual
+AC-301, AC-302, AC-304 y AC-305 son decisiones de maquetado y de texto: se comprueban a mano,
+igual
 que AC-1313 de 003. AC-303 si se puede leer del codigo.
 
 ## FR-4 · El menu propone, no impone

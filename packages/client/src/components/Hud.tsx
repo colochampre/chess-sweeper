@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import type { Color, EndReason, PieceType } from '@cm/engine';
-import { MINE_SRC, PIECE_VALUE, pieceSrc } from '../theme.js';
+import type { Color, EndReason } from '@cm/engine';
+import { MINE_SRC } from '../theme.js';
 import { useGame } from '../store.js';
-import { clockRemaining, drawButton, formatClock, type ClockView } from '../online.js';
+import { drawButton } from '../online.js';
 
 export const COLOR_NAME: Record<Color, string> = { w: 'Blancas', b: 'Negras' };
 
@@ -40,49 +40,10 @@ function useSecondsLeft(deadline: number | null): number | null {
 }
 
 /**
- * Late mientras el reloj corre y se para cuando no. Se refresca cada decima porque por
- * debajo de diez segundos se muestran decimas; con el reloj parado no hay nada que refrescar
- * y el intervalo ni se crea.
+ * El riel de la partida. Los relojes y los cementerios ya no viven aqui: se fueron a las
+ * tiras de cada jugador, a los lados del tablero (FR-7), que es donde se miran sin apartar
+ * la vista de la posicion.
  */
-function useClockTick(running: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!running) return;
-    const id = window.setInterval(() => setNow(Date.now()), 100);
-    return () => window.clearInterval(id);
-  }, [running]);
-
-  return running ? now : Date.now();
-}
-
-/**
- * Los dos relojes, el del rival arriba. El numero sale de lo ultimo que dijo el servidor: el
- * cliente no lleva su propia cuenta (AC-1412).
- */
-function Clocks({ view, mine }: { view: ClockView; mine: Color }) {
-  const now = useClockTick(view.running !== null);
-  const rival = mine === 'w' ? 'b' : 'w';
-
-  const row = (color: Color, label: string) => {
-    const left = clockRemaining(view, color, now);
-    return (
-      <div className={`clock${view.running === color ? ' ticking' : ''}${left <= 10_000 ? ' low' : ''}`}>
-        <span className="label">{label}</span>
-        <strong>{formatClock(left)}</strong>
-      </div>
-    );
-  };
-
-  return (
-    <div className="panel clocks">
-      {row(rival, COLOR_NAME[rival])}
-      {row(mine, 'Vos')}
-      {view.running === null && <span className="hint">Reloj en pausa</span>}
-    </div>
-  );
-}
-
 export function Hud() {
   const s = useGame();
   const secondsLeft = useSecondsLeft(s.online.opponentDeadline);
@@ -98,22 +59,6 @@ export function Hud() {
     yourTurn: view.turn === s.humanColor,
     armed: s.online.drawArmed,
   });
-
-  const lost = (color: Color): PieceType[] =>
-    view.captured.filter((p) => p.color === color).map((p) => p.type);
-  const materialDiff =
-    lost('b').reduce((n, t) => n + PIECE_VALUE[t], 0) -
-    lost('w').reduce((n, t) => n + PIECE_VALUE[t], 0);
-
-  const graveyard = (color: Color) => (
-    <div className="graveyard">
-      {lost(color)
-        .sort((a, b) => PIECE_VALUE[b] - PIECE_VALUE[a])
-        .map((t, i) => (
-          <img key={`${t}${i}`} src={pieceSrc(t, color)} alt={t} />
-        ))}
-    </div>
-  );
 
   return (
     <aside className="hud">
@@ -131,10 +76,6 @@ export function Hud() {
                   : `Esperando al rival… ${secondsLeft}s`}
           </span>
         </div>
-      )}
-
-      {s.online.clock !== null && s.mode === 'online' && (
-        <Clocks view={s.online.clock} mine={s.humanColor} />
       )}
 
       <div className="panel counters">
@@ -167,39 +108,12 @@ export function Hud() {
         )}
       </div>
 
-      <div className="panel captures">
-        <div className="side">
-          <span className="label">Negras perdidas</span>
-          {graveyard('b')}
-        </div>
-        <div className="side">
-          <span className="label">Blancas perdidas</span>
-          {graveyard('w')}
-        </div>
-        <div className="material">
-          Material:{' '}
-          {materialDiff > 0
-            ? `+${materialDiff} blancas`
-            : materialDiff < 0
-              ? `+${-materialDiff} negras`
-              : 'igualado'}
-        </div>
-      </div>
-
       <div className="panel actions">
-        {/* En online no va: la revancha se ofrece al final de la partida, y desde aqui se le
-            reiniciaba la partida al rival en mitad del juego. */}
-        {s.mode !== 'online' && (
-          <>
-            <button onClick={() => s.restart()}>Partida nueva</button>
-            <button onClick={() => s.restart(undefined, s.seed)}>Reiniciar misma semilla</button>
-          </>
-        )}
-        <button onClick={s.flipBoard}>Girar tablero</button>
-        {/* Las tablas se ofrecen jugando, asi que el boton vive con el resto de acciones del
-            tablero y no en el final. Es el sitio del que FR-12 quito el de revancha, porque
-            aquel reiniciaba la partida del rival sin avisarle; este no hace nada sin el
-            consentimiento del otro. */}
+        <h3>Partida</h3>
+        {/* Las tablas van primero porque son lo unico de aqui que decide la partida, y
+            porque hay que contestarlas cuando llegan. Vive en el HUD, jugando (AC-1313): es
+            el sitio del que FR-12 quito el de revancha, porque aquel reiniciaba la partida
+            del rival sin avisarle; este no hace nada sin el consentimiento del otro. */}
         {draw !== null && (
           <div className="draw-offer">
             {/* Ofrecer y aceptar mandan lo mismo: el acuerdo lo cierran los dos. */}
@@ -221,6 +135,24 @@ export function Hud() {
             )}
           </div>
         )}
+        {/* En online no van: la revancha se ofrece al final de la partida, y desde aqui se le
+            reiniciaba la partida al rival en mitad del juego. */}
+        {s.mode !== 'online' && (
+          <>
+            <button onClick={() => s.restart()}>Partida nueva</button>
+            <button onClick={() => s.restart(undefined, s.seed)}>Reiniciar misma semilla</button>
+          </>
+        )}
+        <button className="ghost" onClick={s.askLeave}>
+          Menu
+        </button>
+      </div>
+
+      {/* Aparte de las acciones: nada de aqui toca la partida, solo como se la mira. Juntas,
+          "Ofrecer tablas" quedaba entre "Girar tablero" y una casilla de sonido. */}
+      <div className="panel actions prefs">
+        <h3>Preferencias</h3>
+        <button onClick={s.flipBoard}>Girar tablero</button>
         <label className="check-row">
           <input
             type="checkbox"
@@ -243,12 +175,8 @@ export function Hud() {
             {s.showBalance ? 'Ocultar' : 'Mostrar'} panel de balance
           </button>
         )}
-        <button className="ghost" onClick={s.askLeave}>
-          Menu
-        </button>
       </div>
 
-      <p className="hint">Clic derecho: poner o quitar una bandera roja.</p>
       {s.error && <div className="panel error">{s.error}</div>}
     </aside>
   );

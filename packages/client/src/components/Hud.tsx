@@ -13,6 +13,7 @@ export const END_TEXT: Record<EndReason, string> = {
   'both-kings-destroyed': 'Los dos reyes han volado: tablas',
   'insufficient-material': 'Tablas por material insuficiente',
   'fifty-move': 'Tablas por la regla de 50 jugadas',
+  threefold: 'Tablas por repeticion',
   abandoned: 'Partida abandonada',
   'agreed-draw': 'Tablas acordadas',
   timeout: 'Se acabo el tiempo',

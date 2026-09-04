@@ -13,7 +13,7 @@ import { isTimeControl, type TimeControl } from './clock.js';
  * suya: si fuera solo un numero documentado, un cliente viejo contra un servidor nuevo no se
  * rechazaria, se rompería raro. Se sube cada vez que cambian `ClientMessage` o `ServerMessage`.
  */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /** Parametro de la query donde viaja la version. */
 export const PROTOCOL_PARAM = 'v';

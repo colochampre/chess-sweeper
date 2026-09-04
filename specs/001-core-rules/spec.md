@@ -108,6 +108,33 @@ Jaque mate clásico, más muerte instantánea por explosión del rey.
 - **AC-705** Con `kingImmuneToMines: true` el rey sobrevive a las explosiones.
 - **AC-706** Ningún movimiento es aceptado una vez la partida ha terminado.
 
+- **AC-707** Cien medias jugadas sin mover un peon, sin capturar y sin detonar son tablas
+  (`fifty-move`). Estaba implementado desde el principio y sin escribir: se documenta ahora
+  porque AC-708 es su hermana y no tiene sentido especificar una y dejar la otra de palabra.
+- **AC-708** La misma posicion tres veces son tablas (`threefold`), **automaticamente**. FIDE
+  hace reclamable la triple y automatica la quintuple; aqui no hay reclamacion, igual que no
+  la hay para las cien jugadas de AC-707 ni para la bandera del reloj, que cae sola. Un
+  arbitro al que hay que llamar es una regla que se aplica solo cuando alguien se da cuenta.
+- **AC-709** "La misma posicion" son las cuatro de siempre: donde esta cada pieza, quien
+  mueve, los derechos de enroque y la captura al paso. El revelado, las banderas, los
+  crateres y las minas **no** entran, porque la legalidad ignora las minas: si los
+  movimientos posibles son identicos, la posicion es la misma sepas lo que sepas del terreno.
+  Y las piezas se comparan por tipo y color, nunca por su `id`: dos caballos que se
+  intercambian las casillas dejan la misma posicion, no una nueva.
+  Revelar es monotono y acotado a 64 casillas, asi que la informacion solo puede crecer un
+  numero finito de veces. Cuando deja de crecer, repetir significa exactamente lo que
+  significa en ajedrez: nadie esta avanzando.
+- **AC-710** La cuenta se vacia al mover un peon, al capturar y al detonar: los mismos
+  disparadores que ponen a cero el reloj de AC-707, y por el mismo motivo. Despues de una
+  explosion la posicion anterior es irrepetible, porque hay piezas y minas que ya no existen.
+- **AC-711** La cuenta no sale del motor. `PlayerView` la omite igual que omite las minas: el
+  cliente no la necesita para dibujar y el bot no la necesita para jugar, y mandarla seria
+  meter hasta cien claves de posicion en cada mensaje de una partida que ya tiene un limite
+  de tamano (AC-604 de 003).
+  Omitirla no libra de subir `PROTOCOL_VERSION`: la huella de AC-504 se calcula del texto de
+  las declaraciones, y `GameState` cambia aunque lo que viaje no. La guarda es deliberadamente
+  roma y no se discute con ella.
+
 ## FR-8 · Eventos
 
 `applyMove` devuelve `{ state, events }`. Los eventos van en orden cronológico y bastan para

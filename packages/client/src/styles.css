@@ -69,7 +69,17 @@ button.danger:hover:not(:disabled) {
 
 /* ---------- Armazon comun ---------- */
 
+/*
+ * Las medidas del armazon viven aqui y en ningun otro sitio: el riel, el hueco entre
+ * columnas y los dos topes del tablero. Las usan tanto la rejilla como el calculo que alinea
+ * la cabecera, y escritas dos veces se separarian a la primera de cambio.
+ */
 .app {
+  --rail: 380px;
+  --col-gap: 2rem;
+  --board-max: 780px;
+  /* Todo lo que en la columna del tablero no es tablero: cabecera, tiras, ayuda y margenes. */
+  --chrome: 260px;
   max-width: 1400px;
   margin: 0 auto;
   padding: 1.5rem 2rem;
@@ -78,11 +88,23 @@ button.danger:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
 }
+/*
+ * La cabecera empieza donde empieza el tablero, y el tablero sigue centrado en su columna.
+ * Alinearlos moviendo el tablero al borde lo alejaba del riel media pantalla, asi que se
+ * mueve el titulo: el desplazamiento es la mitad de lo que le sobra a la columna.
+ *
+ * `100%` aqui es el ancho del contenido de `.app`, asi que la columna y el tablero se
+ * recalculan desde cero y no se heredan de `.stage`, que mide otra cosa.
+ */
 .app-head {
+  --stage-col: calc(100% - var(--rail) - var(--col-gap));
   display: flex;
   align-items: center;
   gap: 0.85rem;
   margin-bottom: 1rem;
+  margin-left: calc(
+    (var(--stage-col) - min(var(--stage-col), var(--board-max), calc(100vh - var(--chrome)))) / 2
+  );
 }
 .app-head .logo {
   width: 40px;
@@ -103,22 +125,21 @@ button.danger:hover:not(:disabled) {
 
 /*
  * El ancho del tablero sale del ALTO disponible: es lo que hace que ocupe la pantalla en vez
- * de quedarse en un tamano fijo con hueco debajo. `--chrome` es todo lo que no es tablero:
- * cabecera, las dos tiras, la ayuda y los margenes.
+ * de quedarse en un tamano fijo con hueco debajo. Aqui `100%` es la columna del tablero.
  */
 .stage {
-  --chrome: 260px;
-  --board: min(100%, 780px, calc(100vh - var(--chrome)));
+  --board: min(100%, var(--board-max), calc(100vh - var(--chrome)));
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
+
 /* El tablero se lleva la columna ancha: es lo que se viene a hacer, y esta presente. */
 .app-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 2rem;
+  grid-template-columns: minmax(0, 1fr) var(--rail);
+  gap: var(--col-gap);
   /* Estirado, no arriba: asi el riel puede repartirse el alto igual que el tablero. */
   align-items: stretch;
   flex: 1;
@@ -127,6 +148,9 @@ button.danger:hover:not(:disabled) {
 @media (max-width: 900px) {
   .app-body {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .app-head {
+    margin-left: 0;
   }
   .stage {
     --board: min(100%, 520px);
@@ -162,9 +186,8 @@ button.danger:hover:not(:disabled) {
 .rail .actions button {
   padding: 0.7rem 0.9rem;
 }
-/* Al fondo de la columna lo que no decide la partida: preferencias, y la nota de desarrollo. */
-.hud .prefs,
-.rail .footer-hint {
+/* Al fondo de la columna lo que no decide la partida. */
+.hud .prefs {
   margin-top: auto;
 }
 .rail .resume {
@@ -179,6 +202,27 @@ button.danger:hover:not(:disabled) {
   line-height: 1.45;
 }
 
+/*
+ * `time` y no `clock`: `.clock` es el reloj de las tiras del jugador, con su caja oscura y
+ * sus cifras tabulares, y llamar igual a esta seccion le pegaba ese aspecto a un grupo de
+ * botones que no es un reloj.
+ *
+ * Cinco opciones abreviadas: entran en una fila sin partirse en dos lineas.
+ */
+.field.time .options {
+  grid-template-columns: repeat(auto-fit, minmax(52px, 1fr));
+}
+.field.time .option {
+  padding: 0.55rem 0.4rem;
+}
+/* La casilla va en la etiqueta: enciende el reloj, los botones eligen cual. */
+.field .label.toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  width: fit-content;
+}
 .field .label {
   display: block;
   font-size: 0.72rem;
@@ -186,24 +230,6 @@ button.danger:hover:not(:disabled) {
   letter-spacing: 0.07em;
   color: var(--muted);
   margin-bottom: 0.3rem;
-}
-/* Un desplegable, no cuatro tarjetas: el control de tiempo es una eleccion, no una seccion. */
-.field select {
-  width: 100%;
-  font: inherit;
-  color: var(--text);
-  background-color: var(--bg-soft);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 0.6rem 2.1rem 0.6rem 0.75rem;
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%239b958c' stroke-width='1.8' stroke-linecap='round'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 0.7rem center;
-}
-.field select:hover {
-  border-color: #56524d;
 }
 
 /*
@@ -287,10 +313,6 @@ button.danger:hover:not(:disabled) {
 .tweaks section {
   margin-top: 1rem;
 }
-.rail .footer-hint {
-  margin-top: 0.4rem;
-  font-size: 0.75rem;
-}
 
 .options {
   display: grid;
@@ -317,7 +339,7 @@ button.danger:hover:not(:disabled) {
 .option.active:hover {
   border-color: var(--accent);
   background: #37402c;
-  box-shadow: inset 0 -3px 0 var(--accent);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 .option .swatch {
   width: 30px;
@@ -895,4 +917,19 @@ button.danger:hover:not(:disabled) {
 .room-code.searching strong {
   color: var(--muted);
   letter-spacing: 0.18em;
+}
+
+/*
+ * Un `fieldset` sin su aspecto de `fieldset`. Sirve para apagar de una vez todo lo que tiene
+ * dentro cuando hay una partida sin terminar; `min-inline-size` hace falta porque por defecto
+ * vale `min-content` y eso le rompe el ancho a los hijos.
+ */
+.rail .rest {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
 }

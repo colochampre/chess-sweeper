@@ -66,6 +66,13 @@ Durable Object de la sala tiene que decidirse **antes** de aceptar el socket.
   huella de las declaraciones de `ClientMessage`, `ServerMessage` y `ConnectIntent`, con todo
   lo que arrastran, junto a la version que le corresponde. La huella se calcula del codigo,
   no de una lista escrita a mano, para que un tipo nuevo entre solo.
+  La huella recorre TODO el motor y no una lista de ficheros. La lista existio y tenia un
+  agujero: `TimeControl` vive en `clock.ts` y viaja dentro de `ConnectIntent`, pero el
+  recorrido solo miraba `protocol.ts` y `types.ts`, asi que lo daba por un tipo de TypeScript
+  y lo saltaba. Se le anadio un valor al conjunto cerrado, cambio lo que viaja por el cable, y
+  la huella no dijo nada. Una lista escrita a mano es la misma promesa un nivel mas abajo que
+  la que este criterio vino a sustituir; leyendo el directorio entero no hay donde esconderse,
+  y lo que no viaja sigue sin entrar porque el recorrido sale de las tres raices.
   El historial se guarda por version y no como una unica huella al dia: asi, al cambiar los
   mensajes, la unica salida honesta es anadir una entrada nueva. Pisar la de la version
   vigente tambien compila, pero deja de ser un despiste y pasa a ser una linea muy visible en
@@ -160,14 +167,27 @@ Un `socket.destroy()` a secas no deja al cliente ni un motivo: se queda en "Cone
   Si la credencial tampoco vale, se descarta y se muestra el rechazo.
 - **AC-1006** El codigo de sala se valida y se normaliza al escribirlo, no al enviarlo: lo
   que se ve en la caja es lo que se manda.
+- **AC-1007** Con un asiento guardado, el menu no deja empezar otra partida. Volver a la que
+  esta a medias es lo unico que se puede hacer: crear una sala, emparejarse o entrar con un
+  codigo mientras tanto seria dejar tirada una partida en la que hay alguien esperando, y
+  perderla por abandono sin haberlo decidido (AC-1104).
+- **AC-1008** El asiento guardado se descarta en cuanto se sabe que la partida termino, venga
+  ese final del evento `end`, de un `sync` o de volver a una sala que ya acabo.
+  Antes solo se borraba al salir al menu a proposito o cuando el servidor rechazaba la
+  credencial, asi que una partida que terminaba SIN el jugador delante —por ausencia (AC-1104)
+  o por tiempo (AC-1405)— le dejaba el asiento guardado para siempre: el menu seguia
+  ofreciendole volver a una partida que ya habia perdido, y con AC-1007 eso ademas le bloquea
+  el resto del menu.
+  Borrarlo no estorba a la revancha: al acordarse, el servidor vuelve a mandar `seated`
+  (AC-1201) y la credencial se guarda otra vez.
 
-AC-1001 a AC-1003 se comprueban a mano con dos VENTANAS, no con dos pestanas: viven en la
-capa de WebSocket del navegador y no en logica que se pueda aislar. Dos pestanas no sirven
-por lo que dice AC-1005 unas lineas mas arriba —`localStorage` es del navegador y no de la
-pestana, asi que las dos comparten un unico asiento guardado—, con lo cual la segunda
-reclama el asiento de la primera y acabas jugando contra vos mismo con el mismo color. Este
-mismo texto decia "pestanas" y mandaba hacer la prueba de la manera que el propio spec
-documenta como rota.
+AC-1001 a AC-1003, AC-1007 y AC-1008 se comprueban a mano con dos VENTANAS, no con dos
+pestanas: viven en la capa de WebSocket del navegador y no en logica que se pueda aislar.
+Dos pestanas no sirven por lo que dice AC-1005 unas lineas mas arriba —`localStorage` es del
+navegador y no de la pestana, asi que las dos comparten un unico asiento guardado—, con lo
+cual la segunda reclama el asiento de la primera y acabas jugando contra vos mismo con el
+mismo color. Este mismo texto decia "pestanas" y mandaba hacer la prueba de la manera que el
+propio spec documenta como rota.
 
 ## FR-11 - Abandonar una partida
 

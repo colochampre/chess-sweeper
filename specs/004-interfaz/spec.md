@@ -58,12 +58,16 @@ podia existir dentro de una partida en curso.
   opcion se descubria DESPUES de elegirla— y despues una caja con etiqueta aparte, que decia
   lo mismo dos veces. Un control que hay que abrir para saber que pide no explica nada, y el
   sitio donde se escribe el codigo es la explicacion.
+- **AC-306** El menu no lleva notas de desarrollo. Habia una diciendo con que comando se
+  levanta el servidor en local, que es informacion para quien programa esto y no para quien
+  viene a jugar. Vive en el README, en `docs/deploy.md` y en `openspec/config.yaml`: el menu
+  era el cuarto sitio y el unico de cara al jugador.
   Un texto de ayuda dentro de la caja NO es una etiqueta: desaparece al escribir y no se
   anuncia igual, asi que el campo lleva ademas un nombre accesible. Y ese texto lleva su
   propio estilo, porque el de la caja esta pensado para que un codigo se lea como un codigo.
 
-AC-301, AC-302, AC-304 y AC-305 son decisiones de maquetado y de texto: se comprueban a mano,
-igual
+AC-301, AC-302 y de AC-304 a AC-306 son decisiones de maquetado y de texto: se comprueban a
+mano, igual
 que AC-1313 de 003. AC-303 si se puede leer del codigo.
 
 ## FR-4 · El menu propone, no impone
@@ -72,8 +76,15 @@ El menu abria en "Sin reloj" porque era lo que hacian todas las partidas el dia 
 escribio FR-14: el reloj no existia todavia. Ya existe, y un menu que propone la opcion de no
 usarlo esta proponiendo la de antes.
 
-- **AC-401** El control de tiempo abre en 10+5, y "Sin reloj" es la ultima opcion de la lista.
-  Sigue estando entera: proponer no es imponer, y quien no quiera reloj lo apaga en un clic.
+- **AC-401** El reloj se enciende con una casilla y se elige con botones. La casilla viene
+  marcada; los botones —5m, 10m, 15m, 30m y 1h— van de la mas corta a la mas larga y se
+  ofrecen a la vista y no en un desplegable: son cortos y caben, asi que esconderlos detras de
+  un clic solo anadia un paso para leer lo mismo. Las etiquetas van abreviadas para que los
+  cinco entren en una fila: partidas en dos lineas se leen peor que abreviadas.
+  Jugar sin reloj NO es uno de los botones. Puesto entre ellos, elegirlo borraba de paso el
+  control que tenias puesto; como casilla, apagar y volver a encender lo recuerda. Y sigue
+  existiendo, que es lo que importa: proponer no es imponer, y contra la maquina y en dos
+  jugadores tampoco hay reloj.
 - **AC-402** El valor por defecto de cada lista del menu es una constante con nombre, no "el
   primero del array". Reordenar una lista es una decision de maquetado; cambiar lo que viene
   marcado es una decision de producto. Atadas, la primera hacia la segunda en silencio, que es
@@ -81,6 +92,15 @@ usarlo esta proponiendo la de antes.
 - **AC-403** Lo que el menu propone no toca lo que el servidor asume. Un `create` sin control
   de tiempo sigue creando una sala sin reloj (AC-1401 de 003): el defecto de la pantalla y el
   del cable son dos cosas, y solo el segundo es una garantia.
+- **AC-404** Cada boton dice los minutos, y lo que dice es cierto: los controles que ofrece el
+  menu NO llevan incremento. Un boton que dijese "10 min" sobre un control de 10+5 sumaria
+  cinco segundos por jugada, y la partida duraria bastante mas de diez minutos: seria la misma
+  clase de mentira que AC-304 prohibe en la accion primaria.
+  El motor sigue teniendo los controles con incremento y el cable los sigue aceptando; lo que
+  no hace el menu es ofrecerlos con una etiqueta que no los describe.
+
+De AC-401 a AC-404 estan cubiertos en `packages/client/tests/menuOptions.test.ts`. Que se
+dibujen como botones es maquetado y se comprueba a mano.
 
 ## FR-5 · Las tres pantallas son la misma aplicacion
 
@@ -97,6 +117,18 @@ al entrar a jugar. Pasar de una a otra parecia cambiar de aplicacion.
   tres. La ayuda del clic derecho estaba al final del HUD, que es la columna de al lado.
 - **AC-504** El velo de fin de partida se cine al tablero y no a la columna. Con la columna
   mas ancha que el tablero, se salia por el lado.
+- **AC-505** El titulo empieza donde empieza el tablero, y el tablero sigue centrado en su
+  columna. Se centraba dentro de una columna mas ancha que el, asi que arrancaba unos cien
+  pixeles a la derecha del titulo y nada de la pantalla compartia un borde.
+  Se alinean moviendo el TITULO y no el tablero. Llevar el tablero al borde de su columna los
+  alineaba igual, pero le echaba encima toda la holgura por el otro lado y lo dejaba media
+  pantalla lejos del riel: se arreglaba una alineacion rompiendo la del conjunto. El titulo se
+  desplaza la mitad de lo que le sobra a la columna, que es exactamente donde cae el borde
+  izquierdo del tablero.
+  Las medidas que entran en esa cuenta —el riel, el hueco entre columnas y los dos topes del
+  tablero— viven en un solo sitio y las usan tanto la rejilla como el desplazamiento. Escritas
+  dos veces se separarian a la primera de cambio, y la unica senal seria que el titulo deja de
+  alinear. En pantallas pequenas no hay dos columnas que compensar y el desplazamiento es cero.
 
 ## FR-6 · El HUD separa lo que decide de lo que solo se mira
 

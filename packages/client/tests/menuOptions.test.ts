@@ -5,9 +5,10 @@
  * justo lo que le faltaba al defecto del reloj el dia que se movio.
  */
 import { describe, expect, it } from 'vitest';
-import { isTimeControl } from '@cm/engine';
+import { TIME_CONTROLS, isTimeControl } from '@cm/engine';
 import {
   DEFAULT_BOT_LEVEL,
+  DEFAULT_CLOCK_ON,
   DEFAULT_COLOR,
   DEFAULT_DIFFICULTY,
   DEFAULT_MODE,
@@ -18,12 +19,16 @@ import {
 } from '../src/menuOptions.js';
 
 describe('FR-4 el menu propone, no impone', () => {
-  it('AC-401: abre en 10+5 y "Sin reloj" queda al final de la lista', () => {
-    expect(DEFAULT_TIME_CONTROL).toBe('10+5');
-    expect(TIME_OPTIONS[TIME_OPTIONS.length - 1].value).toBe('none');
+  it('AC-401: abre en 10 min, y jugar sin reloj no es uno de los botones', () => {
+    expect(DEFAULT_TIME_CONTROL).toBe('10+0');
+    expect(DEFAULT_CLOCK_ON).toBe(true);
 
-    // Y sigue estando: proponer no es imponer. Quien no quiera reloj lo apaga en un clic.
-    expect(TIME_OPTIONS.filter((t) => t.value === 'none')).toHaveLength(1);
+    // Apagar el reloj es la casilla, no una opcion mas: puesta entre los botones, elegirla
+    // borraba de paso el control que tenias puesto.
+    expect(TIME_OPTIONS.map((t) => t.value)).not.toContain('none');
+    // Y las que quedan van de la mas corta a la mas larga.
+    const minutes = TIME_OPTIONS.map((t) => TIME_CONTROLS[t.value]?.initialMs ?? 0);
+    expect(minutes).toEqual([...minutes].sort((a, b) => a - b));
   });
 
   it('AC-402: los defectos no son "el primero del array"', () => {
@@ -38,6 +43,16 @@ describe('FR-4 el menu propone, no impone', () => {
     expect(DIFFICULTIES.map((d) => d.value)).toContain(DEFAULT_DIFFICULTY);
     expect(DIFFICULTIES.map((d) => d.value)).toContain(DEFAULT_BOT_LEVEL);
     expect(DEFAULT_COLOR).toBe('random');
+  });
+
+  it('AC-404: lo que ofrece el menu no lleva incremento, para que la etiqueta sea cierta', () => {
+    // Un boton que dice "10 min" con un control de 10+5 miente: sumaria cinco segundos por
+    // jugada y la partida duraria bastante mas de diez minutos.
+    for (const option of TIME_OPTIONS) {
+      const control = TIME_CONTROLS[option.value];
+      if (control === null) continue;
+      expect(control.incrementMs, option.label).toBe(0);
+    }
   });
 
   it('AC-403: todo lo que ofrece el menu es un control que el servidor acepta', () => {

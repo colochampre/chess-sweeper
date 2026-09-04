@@ -211,10 +211,26 @@ export const useGame = create<AppState>((set, get) => {
   });
 
   /** Reproduce la animacion y despues fija la vista definitiva. */
+/**
+ * Una partida terminada no es "una partida sin terminar": en cuanto se sabe que acabo, la
+ * credencial guardada deja de valer (AC-1008).
+ *
+ * Antes solo se borraba al salir al menu a proposito o cuando el servidor rechazaba la
+ * credencial, asi que una partida que terminaba SIN VOS delante —por ausencia o por tiempo—
+ * dejaba el asiento guardado para siempre y el menu seguia ofreciendo volver a ella.
+ *
+ * Se puede borrar sin miedo a la revancha: al acordarse, el servidor vuelve a mandar `seated`
+ * y la credencial se guarda otra vez.
+ */
+const forgetSeatIfOver = (mode: Mode, view: PlayerView): void => {
+  if (mode === 'online' && view.status !== 'playing') clearSeat();
+};
+
   const play = async (events: GameEvent[], view: PlayerView): Promise<void> => {
     set({ animating: true, selected: null, targets: [], error: null });
     await playEvents(events, animApi(view.config));
     const s = get();
+    forgetSeatIfOver(s.mode, view);
     set({
       view,
       ...renderLayer(view),
@@ -249,6 +265,9 @@ export const useGame = create<AppState>((set, get) => {
         seatFallback = null;
         tryingSeatFallback = false;
         saveSeat({ code: message.code, token: message.token });
+        // Volver a una partida que ya termino la guarda y la descarta acto seguido: se ve el
+        // final y el menu deja de ofrecerla.
+        forgetSeatIfOver('online', message.view);
         set({
           screen: 'game',
           mode: 'online',
@@ -280,6 +299,7 @@ export const useGame = create<AppState>((set, get) => {
         });
         break;
       case 'sync':
+        forgetSeatIfOver('online', message.view);
         set({ view: message.view, ...renderLayer(message.view), animating: false });
         break;
       case 'moved': {

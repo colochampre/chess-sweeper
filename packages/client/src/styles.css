@@ -615,6 +615,7 @@ button.danger:hover:not(:disabled) {
 
 .counters {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
 }
 .counter {
@@ -863,4 +864,19 @@ button.danger:hover:not(:disabled) {
 /* Un tablero de exhibicion: se mira, no se juega. Sin cursor que prometa un clic. */
 .board.static .cell {
   cursor: default;
+}
+
+/*
+ * El contador de jugadas sin avance. Va en el mismo rojo de siete segmentos que las minas
+ * mientras es un dato, y se enciende cuando pasa a ser un aviso.
+ */
+/* Fila propia: la etiqueta dice que cuenta, y eso no cabe al lado de las otras dos. */
+.counter.stall {
+  flex: 1 0 100%;
+  justify-content: space-between;
+  font-size: 1.05rem;
+  color: var(--muted);
+}
+.counter.stall.close {
+  color: #d9a441;
 }

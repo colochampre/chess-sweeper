@@ -339,7 +339,7 @@ button.danger:hover:not(:disabled) {
 .option.active:hover {
   border-color: var(--accent);
   background: #37402c;
-  box-shadow: inset 0 -3px 0 var(--accent);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 .option .swatch {
   width: 30px;
@@ -917,4 +917,19 @@ button.danger:hover:not(:disabled) {
 .room-code.searching strong {
   color: var(--muted);
   letter-spacing: 0.18em;
+}
+
+/*
+ * Un `fieldset` sin su aspecto de `fieldset`. Sirve para apagar de una vez todo lo que tiene
+ * dentro cuando hay una partida sin terminar; `min-inline-size` hace falta porque por defecto
+ * vale `min-content` y eso le rompe el ancho a los hijos.
+ */
+.rail .rest {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
 }

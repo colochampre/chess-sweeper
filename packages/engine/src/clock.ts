@@ -19,7 +19,9 @@ export type TimeControl =
   | '5+2'
   | '10+0'
   | '10+5'
+  | '15+0'
   | '15+10'
+  | '30+0'
   | '60+0';
 
 /**
@@ -36,9 +38,11 @@ export const TIME_CONTROLS: Record<TimeControl, { initialMs: number; incrementMs
     '5+2': { initialMs: 5 * 60_000, incrementMs: 2_000 },
     '10+0': { initialMs: 10 * 60_000, incrementMs: 0 },
     '10+5': { initialMs: 10 * 60_000, incrementMs: 5_000 },
+    '15+0': { initialMs: 15 * 60_000, incrementMs: 0 },
     '15+10': { initialMs: 15 * 60_000, incrementMs: 10_000 },
-    // La partida larga del menu. Sin incremento: quien elige una hora no esta contando
-    // segundos, y sumarlos alargaria una partida que ya es larga por decision.
+    // Los largos del menu. Sin incremento: quien elige media hora no esta contando segundos,
+    // y sumarlos alargaria una partida que ya es larga por decision.
+    '30+0': { initialMs: 30 * 60_000, incrementMs: 0 },
     '60+0': { initialMs: 60 * 60_000, incrementMs: 0 },
   };
 

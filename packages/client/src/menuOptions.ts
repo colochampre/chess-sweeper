@@ -23,9 +23,9 @@ export const MODES: Option<Mode>[] = [
 ];
 
 /**
- * De la mas corta a la mas larga, y "Sin reloj" al final (AC-401). Estaba primera porque el
- * dia que se escribio FR-14 era lo que hacian todas las partidas: el reloj no existia. Ya
- * existe, asi que abrir en "Sin reloj" es proponer la version de antes del reloj.
+ * De la mas corta a la mas larga. Jugar SIN reloj ya no es una de estas: es la casilla que
+ * enciende o apaga el reloj entero (AC-401). Puesta entre los botones, elegirla borraba de
+ * paso el control que tenias elegido; como casilla, apagar y volver a encender lo recuerda.
  *
  * Son controles SIN incremento a proposito. La etiqueta dice "10 min" y tiene que ser cierta:
  * con 10+5 sumarias cinco segundos por jugada y una partida de "10 min" duraria bastante mas
@@ -38,8 +38,9 @@ export const MODES: Option<Mode>[] = [
 export const TIME_OPTIONS: Option<TimeControl>[] = [
   { value: '5+0', label: '5 min' },
   { value: '10+0', label: '10 min' },
+  { value: '15+0', label: '15 min' },
+  { value: '30+0', label: '30 min' },
   { value: '60+0', label: '1 h' },
-  { value: 'none', label: 'Sin reloj' },
 ];
 
 /**
@@ -54,6 +55,8 @@ export const DIFFICULTIES: Option<Difficulty>[] = [
 
 export const DEFAULT_MODE: Mode = 'online';
 export const DEFAULT_TIME_CONTROL: TimeControl = '10+0';
+/** Se juega con reloj salvo que se apague: es lo que propone el menu, no lo que asume el cable. */
+export const DEFAULT_CLOCK_ON = true;
 export const DEFAULT_DIFFICULTY: Difficulty = 'normal';
 export const DEFAULT_BOT_LEVEL: Difficulty = 'normal';
 /**

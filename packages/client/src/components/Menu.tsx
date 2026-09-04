@@ -17,6 +17,7 @@ import { BoardView } from './BoardView.js';
 import { TableView, openingSides } from './Table.js';
 import {
   DEFAULT_BOT_LEVEL,
+  DEFAULT_CLOCK_ON,
   DEFAULT_COLOR,
   DEFAULT_DIFFICULTY,
   DEFAULT_MODE,
@@ -35,6 +36,7 @@ export function Menu() {
   const [botLevel, setBotLevel] = useState<Difficulty>(DEFAULT_BOT_LEVEL);
   const [color, setColor] = useState<Color | 'random'>(DEFAULT_COLOR);
   const [timeControl, setTimeControl] = useState<TimeControl>(DEFAULT_TIME_CONTROL);
+  const [clockOn, setClockOn] = useState(DEFAULT_CLOCK_ON);
   const [joinCode, setJoinCode] = useState('');
 
   const savedSeat = loadSeat();
@@ -45,7 +47,9 @@ export function Menu() {
   // para que no haya dos numeros que puedan discrepar.
   const scene = { ...previewScene(difficulty), flipped: yourColor === 'b' };
   // Las tiras estan tambien aqui, con el reloj elegido puesto: donde hay tablero, hay mesa.
-  const sides = openingSides(timeControl, yourColor);
+  // Lo que se pide de verdad: el control elegido, o ninguno si el reloj esta apagado.
+  const clock: TimeControl = clockOn ? timeControl : 'none';
+  const sides = openingSides(clock, yourColor);
   const { start, end } = mineRowRange(scene.config);
   const mineRows = Math.max(0, end - start + 1);
 
@@ -88,13 +92,24 @@ export function Menu() {
 
         {/* Botones y no un desplegable: son cuatro opciones cortas y caben a la vista, asi
             que esconderlas detras de un clic solo anadia un paso para leer lo mismo. */}
-        <section className="field">
-          <span className="label">Reloj</span>
+        {/* La casilla enciende el reloj entero y los botones eligen cual. "Sin reloj" era uno
+            de los botones, y elegirlo borraba de paso el control que tenias puesto; asi,
+            apagar y volver a encender lo recuerda (AC-401). */}
+        <section className="field clock">
+          <label className="label toggle">
+            <input
+              type="checkbox"
+              checked={clockOn}
+              onChange={(e) => setClockOn(e.target.checked)}
+            />
+            Reloj
+          </label>
           <div className="options">
             {TIME_OPTIONS.map((t) => (
               <button
                 key={t.value}
-                className={`option${timeControl === t.value ? ' active' : ''}`}
+                className={`option${clockOn && timeControl === t.value ? ' active' : ''}`}
+                disabled={!clockOn}
                 onClick={() => setTimeControl(t.value)}
               >
                 <strong>{t.label}</strong>
@@ -110,7 +125,7 @@ export function Menu() {
         <button
           className="start"
           onClick={() =>
-            matchOnline({ difficulty, boardSize: BOARD_SIZE, hostColor: color, timeControl })
+            matchOnline({ difficulty, boardSize: BOARD_SIZE, hostColor: color, timeControl: clock })
           }
         >
           Empezar partida
@@ -121,7 +136,7 @@ export function Menu() {
           <button
             className="alt-action"
             onClick={() =>
-              hostOnline({ difficulty, boardSize: BOARD_SIZE, hostColor: color, timeControl })
+              hostOnline({ difficulty, boardSize: BOARD_SIZE, hostColor: color, timeControl: clock })
             }
           >
             <strong>Jugar con un amigo</strong>

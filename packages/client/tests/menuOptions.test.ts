@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { TIME_CONTROLS, isTimeControl } from '@cm/engine';
 import {
   DEFAULT_BOT_LEVEL,
+  DEFAULT_CLOCK_ON,
   DEFAULT_COLOR,
   DEFAULT_DIFFICULTY,
   DEFAULT_MODE,
@@ -18,12 +19,16 @@ import {
 } from '../src/menuOptions.js';
 
 describe('FR-4 el menu propone, no impone', () => {
-  it('AC-401: abre en 10+0 y "Sin reloj" queda al final de la lista', () => {
+  it('AC-401: abre en 10 min, y jugar sin reloj no es uno de los botones', () => {
     expect(DEFAULT_TIME_CONTROL).toBe('10+0');
-    expect(TIME_OPTIONS[TIME_OPTIONS.length - 1].value).toBe('none');
+    expect(DEFAULT_CLOCK_ON).toBe(true);
 
-    // Y sigue estando: proponer no es imponer. Quien no quiera reloj lo apaga en un clic.
-    expect(TIME_OPTIONS.filter((t) => t.value === 'none')).toHaveLength(1);
+    // Apagar el reloj es la casilla, no una opcion mas: puesta entre los botones, elegirla
+    // borraba de paso el control que tenias puesto.
+    expect(TIME_OPTIONS.map((t) => t.value)).not.toContain('none');
+    // Y las que quedan van de la mas corta a la mas larga.
+    const minutes = TIME_OPTIONS.map((t) => TIME_CONTROLS[t.value]?.initialMs ?? 0);
+    expect(minutes).toEqual([...minutes].sort((a, b) => a - b));
   });
 
   it('AC-402: los defectos no son "el primero del array"', () => {

@@ -202,9 +202,20 @@ button.danger:hover:not(:disabled) {
   line-height: 1.45;
 }
 
-/* Cuatro opciones cortas: entran en una fila sin apretarse. */
-.field .options {
-  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+/* Cinco opciones cortas: se reparten la fila y bajan solas si no entran. */
+.field.clock .options {
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+}
+.field.clock .option {
+  padding: 0.55rem 0.3rem;
+}
+/* La casilla va en la etiqueta: enciende el reloj, los botones eligen cual. */
+.field .label.toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  width: fit-content;
 }
 .field .label {
   display: block;

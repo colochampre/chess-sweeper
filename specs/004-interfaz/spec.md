@@ -76,10 +76,14 @@ El menu abria en "Sin reloj" porque era lo que hacian todas las partidas el dia 
 escribio FR-14: el reloj no existia todavia. Ya existe, y un menu que propone la opcion de no
 usarlo esta proponiendo la de antes.
 
-- **AC-401** El control de tiempo abre en 10 min, y "Sin reloj" es la ultima opcion. Sigue
-  estando: proponer no es imponer, y quien no quiera reloj lo elige en un clic. Son cuatro
-  —5 min, 10 min, 1 h y Sin reloj— y se ofrecen como BOTONES y no como desplegable: caben a
-  la vista, asi que esconderlas detras de un clic solo anadia un paso para leer lo mismo.
+- **AC-401** El reloj se enciende con una casilla y se elige con botones. La casilla viene
+  marcada; los botones —5, 10, 15, 30 minutos y 1 hora— van de la mas corta a la mas larga y
+  se ofrecen a la vista y no en un desplegable: son cortos y caben, asi que esconderlos detras
+  de un clic solo anadia un paso para leer lo mismo.
+  Jugar sin reloj NO es uno de los botones. Puesto entre ellos, elegirlo borraba de paso el
+  control que tenias puesto; como casilla, apagar y volver a encender lo recuerda. Y sigue
+  existiendo, que es lo que importa: proponer no es imponer, y contra la maquina y en dos
+  jugadores tampoco hay reloj.
 - **AC-402** El valor por defecto de cada lista del menu es una constante con nombre, no "el
   primero del array". Reordenar una lista es una decision de maquetado; cambiar lo que viene
   marcado es una decision de producto. Atadas, la primera hacia la segunda en silencio, que es

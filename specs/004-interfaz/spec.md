@@ -109,11 +109,18 @@ al entrar a jugar. Pasar de una a otra parecia cambiar de aplicacion.
   tres. La ayuda del clic derecho estaba al final del HUD, que es la columna de al lado.
 - **AC-504** El velo de fin de partida se cine al tablero y no a la columna. Con la columna
   mas ancha que el tablero, se salia por el lado.
-- **AC-505** El titulo, el tablero y la ayuda del tablero arrancan en la misma vertical. El
-  tablero se centraba dentro de su columna, que es mas ancha que el, asi que empezaba unos
-  cien pixeles a la derecha del titulo y nada de la pantalla compartia un borde. Se alinea al
-  principio de la columna: la holgura sobrante se va toda a un lado en vez de repartirse en
-  dos margenes que no alinean con nada.
+- **AC-505** El titulo empieza donde empieza el tablero, y el tablero sigue centrado en su
+  columna. Se centraba dentro de una columna mas ancha que el, asi que arrancaba unos cien
+  pixeles a la derecha del titulo y nada de la pantalla compartia un borde.
+  Se alinean moviendo el TITULO y no el tablero. Llevar el tablero al borde de su columna los
+  alineaba igual, pero le echaba encima toda la holgura por el otro lado y lo dejaba media
+  pantalla lejos del riel: se arreglaba una alineacion rompiendo la del conjunto. El titulo se
+  desplaza la mitad de lo que le sobra a la columna, que es exactamente donde cae el borde
+  izquierdo del tablero.
+  Las medidas que entran en esa cuenta —el riel, el hueco entre columnas y los dos topes del
+  tablero— viven en un solo sitio y las usan tanto la rejilla como el desplazamiento. Escritas
+  dos veces se separarian a la primera de cambio, y la unica senal seria que el titulo deja de
+  alinear. En pantallas pequenas no hay dos columnas que compensar y el desplazamiento es cero.
 
 ## FR-6 · El HUD separa lo que decide de lo que solo se mira
 

@@ -69,7 +69,17 @@ button.danger:hover:not(:disabled) {
 
 /* ---------- Armazon comun ---------- */
 
+/*
+ * Las medidas del armazon viven aqui y en ningun otro sitio: el riel, el hueco entre
+ * columnas y los dos topes del tablero. Las usan tanto la rejilla como el calculo que alinea
+ * la cabecera, y escritas dos veces se separarian a la primera de cambio.
+ */
 .app {
+  --rail: 380px;
+  --col-gap: 2rem;
+  --board-max: 780px;
+  /* Todo lo que en la columna del tablero no es tablero: cabecera, tiras, ayuda y margenes. */
+  --chrome: 260px;
   max-width: 1400px;
   margin: 0 auto;
   padding: 1.5rem 2rem;
@@ -78,11 +88,23 @@ button.danger:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
 }
+/*
+ * La cabecera empieza donde empieza el tablero, y el tablero sigue centrado en su columna.
+ * Alinearlos moviendo el tablero al borde lo alejaba del riel media pantalla, asi que se
+ * mueve el titulo: el desplazamiento es la mitad de lo que le sobra a la columna.
+ *
+ * `100%` aqui es el ancho del contenido de `.app`, asi que la columna y el tablero se
+ * recalculan desde cero y no se heredan de `.stage`, que mide otra cosa.
+ */
 .app-head {
+  --stage-col: calc(100% - var(--rail) - var(--col-gap));
   display: flex;
   align-items: center;
   gap: 0.85rem;
   margin-bottom: 1rem;
+  margin-left: calc(
+    (var(--stage-col) - min(var(--stage-col), var(--board-max), calc(100vh - var(--chrome)))) / 2
+  );
 }
 .app-head .logo {
   width: 40px;
@@ -103,24 +125,21 @@ button.danger:hover:not(:disabled) {
 
 /*
  * El ancho del tablero sale del ALTO disponible: es lo que hace que ocupe la pantalla en vez
- * de quedarse en un tamano fijo con hueco debajo. `--chrome` es todo lo que no es tablero:
- * cabecera, las dos tiras, la ayuda y los margenes.
+ * de quedarse en un tamano fijo con hueco debajo. Aqui `100%` es la columna del tablero.
  */
 .stage {
-  --chrome: 260px;
-  --board: min(100%, 780px, calc(100vh - var(--chrome)));
+  --board: min(100%, var(--board-max), calc(100vh - var(--chrome)));
   display: flex;
   flex-direction: column;
-  /* Al principio de la columna y no centrado: asi el tablero, su ayuda y el titulo de la
-     cabecera arrancan todos en la misma vertical, que es el borde del contenido. */
-  align-items: flex-start;
+  align-items: center;
 }
+
 
 /* El tablero se lleva la columna ancha: es lo que se viene a hacer, y esta presente. */
 .app-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 2rem;
+  grid-template-columns: minmax(0, 1fr) var(--rail);
+  gap: var(--col-gap);
   /* Estirado, no arriba: asi el riel puede repartirse el alto igual que el tablero. */
   align-items: stretch;
   flex: 1;
@@ -129,6 +148,9 @@ button.danger:hover:not(:disabled) {
 @media (max-width: 900px) {
   .app-body {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .app-head {
+    margin-left: 0;
   }
   .stage {
     --board: min(100%, 520px);

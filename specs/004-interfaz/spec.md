@@ -157,19 +157,30 @@ citan AC-1413: la etiqueta y la accion se afirman juntas porque son el mismo bot
 El contador de jugada pedia un denominador: "Jugada 1/n", para que se supiera de entrada
 hasta donde llega una partida. No hay tal numero. `fullmove` no tiene techo: una partida
 puede llegar a la 200 sin acercarse a nada, porque el unico limite del motor es la regla de
-las cien medias jugadas (AC-707 de 001) y ese contador **se reinicia** con cada peon, cada
+las cincuenta jugadas (AC-707 de 001) y ese contador **se reinicia** con cada peon, cada
 captura y cada detonacion.
+
+Y la regla no dice que una partida dure cincuenta jugadas: dice que son tablas si pasan
+cincuenta de cada bando SIN mover un peon y SIN capturar. En una apertura el contador no
+despega, porque los peones se mueven todo el tiempo. Sube en los finales, cuando dos
+jugadores mueven piezas de un lado a otro sin decidir nada, que es lo que la regla corta.
 
 - **AC-901** Las jugadas sin avance tienen su propio contador, separado del numero de jugada.
   Ponerle un denominador a `fullmove` seria escribir un limite que no existe: ni el numerador
   ni el denominador serian lo que parecen.
-- **AC-902** Se cuenta en jugadas completas y no en medias, porque la regla se conoce por ese
+- **AC-902** El contador no se ensena mientras no diga nada: aparece a partir de veinte
+  jugadas sin avance. Que aparezca ES el dato — si esta en pantalla, la partida se estanco.
+  Un `0/50` fijo desde la primera jugada se pasaria la partida entera en cero y lo unico que
+  ensenaria es a no mirar esa esquina.
+- **AC-903** Se cuenta en jugadas completas y no en medias, porque la regla se conoce por ese
   nombre: el motor corta a las cien medias, que son las cincuenta de toda la vida.
-- **AC-903** Cuando quedan diez o menos, el contador cambia de color. Hasta ahi es un dato;
+- **AC-904** Cuando quedan diez o menos, el contador cambia de color. Hasta ahi es un dato;
   a partir de ahi es un aviso, y la diferencia entre las dos cosas es si hay que hacer algo.
+- **AC-905** La etiqueta dice QUE se cuenta, no como se llama el numero. "Sin avance" solo se
+  entiende si ya sabes la regla, y quien ya la sabe no necesita el contador.
 
-AC-901 y AC-902 estan cubiertos en `packages/client/tests/counters.test.ts`. Donde se coloca
-el contador es maquetado y se comprueba a mano.
+De AC-902 a AC-904 estan cubiertos en `packages/client/tests/counters.test.ts`. AC-901, AC-905 y
+donde se coloca el contador son texto y maquetado: se comprueban a mano.
 
 ## Lo que no cambia
 

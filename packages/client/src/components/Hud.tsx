@@ -91,16 +91,19 @@ export function Hud() {
           <span>{view.fullmove}</span>
         </div>
         {/* Su propio contador y no un denominador de la jugada: `fullmove` no tiene techo,
-            y esto vuelve a cero con cada peon, cada captura y cada detonacion (AC-707). */}
-        <div
-          className={`counter stall${stall.close ? ' close' : ''}`}
-          title="Jugadas sin peon, sin captura y sin detonacion. Al llegar al limite, tablas."
-        >
-          <span className="label">Sin avance</span>
-          <span>
-            {stall.moves}/{stall.limit}
-          </span>
-        </div>
+            y esto vuelve a cero con cada peon, cada captura y cada detonacion (AC-707).
+            Y no se ensena hasta que dice algo: que aparezca es el dato (AC-902). */}
+        {stall.visible && (
+          <div
+            className={`counter stall${stall.close ? ' close' : ''}`}
+            title="Jugadas seguidas sin mover un peon, sin capturar y sin detonar. Al llegar al limite, tablas."
+          >
+            <span className="label">Sin peon ni captura</span>
+            <span>
+              {stall.moves}/{stall.limit}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="panel turn">

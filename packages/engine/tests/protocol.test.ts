@@ -11,7 +11,7 @@
  * lista a mano seria la misma promesa un nivel mas abajo.
  */
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -21,8 +21,23 @@ import history from './protocol.history.json' with { type: 'json' };
 /** Lo que define el cable: los mensajes y como se pide entrar a una sala. */
 const ROOTS = ['ClientMessage', 'ServerMessage', 'ConnectIntent'];
 
-/** Ficheros donde viven esas declaraciones y todo lo que arrastran. */
-const SOURCES = ['../src/protocol.ts', '../src/types.ts'];
+/**
+ * Todo el motor, y no una lista de ficheros.
+ *
+ * Era `protocol.ts` y `types.ts`, y por eso `TimeControl` —que vive en `clock.ts` y viaja en
+ * `ConnectIntent`— no lo veia nadie: el recorrido lo daba por un tipo de TypeScript y lo
+ * saltaba. Se le anadio un valor al conjunto cerrado, cambio lo que viaja por el cable, y la
+ * huella no dijo nada.
+ *
+ * Una lista escrita a mano es la misma promesa un nivel mas abajo que la que este test vino a
+ * sustituir. Leyendo el directorio entero no hay donde esconderse: el recorrido sigue saliendo
+ * de las tres raices, asi que lo que no viaja no entra igual.
+ */
+const SOURCE_DIR = new URL('../src/', import.meta.url);
+const SOURCES = readdirSync(SOURCE_DIR)
+  .filter((name) => name.endsWith('.ts'))
+  // Ordenado para que la huella no dependa de como liste el sistema de ficheros.
+  .sort();
 
 type Declaration = ts.TypeAliasDeclaration | ts.InterfaceDeclaration;
 
@@ -30,7 +45,7 @@ type Declaration = ts.TypeAliasDeclaration | ts.InterfaceDeclaration;
 function declarationsByName(): Map<string, Declaration> {
   const found = new Map<string, Declaration>();
   for (const relative of SOURCES) {
-    const path = fileURLToPath(new URL(relative, import.meta.url));
+    const path = fileURLToPath(new URL(relative, SOURCE_DIR));
     const source = ts.createSourceFile(
       path,
       readFileSync(path, 'utf8'),
@@ -102,6 +117,10 @@ describe('FR-5 parametros de conexion', () => {
     expect(types).toContain('PlayerView');
     expect(types).toContain('GameEvent');
     expect(types).toContain('EndReason');
+    // Vive en `clock.ts` y viaja en `ConnectIntent`. Mientras el recorrido miraba solo dos
+    // ficheros no lo veia, asi que se le pudo anadir un valor al conjunto cerrado sin que la
+    // huella dijese nada: el cable cambio en silencio. Se afirma para que no vuelva a pasar.
+    expect(types).toContain('TimeControl');
   });
 
   it('AC-504: la forma del cable coincide con la registrada para esta version', () => {

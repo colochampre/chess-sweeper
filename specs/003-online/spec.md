@@ -66,6 +66,13 @@ Durable Object de la sala tiene que decidirse **antes** de aceptar el socket.
   huella de las declaraciones de `ClientMessage`, `ServerMessage` y `ConnectIntent`, con todo
   lo que arrastran, junto a la version que le corresponde. La huella se calcula del codigo,
   no de una lista escrita a mano, para que un tipo nuevo entre solo.
+  La huella recorre TODO el motor y no una lista de ficheros. La lista existio y tenia un
+  agujero: `TimeControl` vive en `clock.ts` y viaja dentro de `ConnectIntent`, pero el
+  recorrido solo miraba `protocol.ts` y `types.ts`, asi que lo daba por un tipo de TypeScript
+  y lo saltaba. Se le anadio un valor al conjunto cerrado, cambio lo que viaja por el cable, y
+  la huella no dijo nada. Una lista escrita a mano es la misma promesa un nivel mas abajo que
+  la que este criterio vino a sustituir; leyendo el directorio entero no hay donde esconderse,
+  y lo que no viaja sigue sin entrar porque el recorrido sale de las tres raices.
   El historial se guarda por version y no como una unica huella al dia: asi, al cambiar los
   mensajes, la unica salida honesta es anadir una entrada nueva. Pisar la de la version
   vigente tambien compila, pero deja de ser un despiste y pasa a ser una linea muy visible en

@@ -14,16 +14,18 @@ import {
   type GameEvent,
   type GameState,
   type Move,
-  type PieceType,
   type PlayerView,
   type RoomSettings,
   type ServerMessage,
+  type TimeControl,
   isValidRoomCode,
   normalizeRoomCode,
   type Square,
   type ConnectIntent,
 } from '@cm/engine';
 import { playEvents, type AnimApi } from './anim/eventPlayer.js';
+import { renderLayer, type RenderPiece } from './boardScene.js';
+import type { Mode } from './menuOptions.js';
 import {
   OnlineClient,
   clearSeat,
@@ -41,15 +43,10 @@ import {
 } from './sfx.js';
 import { ANIM } from './theme.js';
 
-export type Mode = 'hotseat' | 'bot' | 'online';
+export type { Mode };
 export type Screen = 'menu' | 'lobby' | 'game';
 
-export interface RenderPiece {
-  id: string;
-  type: PieceType;
-  color: Color;
-  sq: Square;
-}
+export type { RenderPiece };
 
 export interface LocalOptions {
   mode: 'hotseat' | 'bot';
@@ -95,6 +92,8 @@ interface AppState {
   screen: Screen;
   mode: Mode;
   difficulty: Difficulty;
+  /** El control de tiempo de la sala. Lo dibuja el lobby mientras espera al rival. */
+  timeControl: TimeControl;
   botLevel: Difficulty;
   humanColor: Color;
   boardSize: number;
@@ -150,25 +149,6 @@ interface AppState {
   setSoundOn: (value: boolean) => void;
   toggleBalancePanel: () => void;
 }
-
-const piecesOf = (view: PlayerView): RenderPiece[] => {
-  const out: RenderPiece[] = [];
-  view.board.forEach((piece, sq) => {
-    if (piece !== null) out.push({ id: piece.id, type: piece.type, color: piece.color, sq });
-  });
-  return out;
-};
-
-/** Vuelca la vista en la capa de render. Se llama al terminar cada animacion. */
-const renderLayer = (view: PlayerView) => ({
-  pieces: piecesOf(view),
-  revealed: view.revealed.slice(),
-  detonated: view.detonated.slice(),
-  craters: view.craters.slice(),
-  adjacency: view.adjacency.slice(),
-  blasts: [] as Square[],
-  dying: [] as string[],
-});
 
 let socket: OnlineClient | null = null;
 
@@ -392,6 +372,7 @@ export const useGame = create<AppState>((set, get) => {
     screen: 'menu',
     mode: 'hotseat',
     difficulty: 'normal',
+    timeControl: 'none',
     botLevel: 'normal',
     humanColor: 'w',
     boardSize: 8,
@@ -497,7 +478,14 @@ export const useGame = create<AppState>((set, get) => {
     // A que sala se entra viaja en la URL de la conexion, no como mensaje: es lo que
     // permite al servidor enrutar hacia la sala antes de aceptar el socket.
     hostOnline: (settings) => {
-      set({ screen: 'lobby', mode: 'online', error: null });
+      // Se guarda lo que se pidio: el lobby dibuja ese tablero mientras se espera al rival.
+      set({
+        screen: 'lobby',
+        mode: 'online',
+        error: null,
+        difficulty: settings.difficulty,
+        timeControl: settings.timeControl ?? 'none',
+      });
       ensureSocket().connect({ a: 'create', ...settings });
     },
 

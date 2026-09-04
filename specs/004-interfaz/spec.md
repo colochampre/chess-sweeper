@@ -152,6 +152,25 @@ codigo.
 Los dos estan cubiertos dentro de `packages/client/tests/draw.test.ts`, en los tests que
 citan AC-1413: la etiqueta y la accion se afirman juntas porque son el mismo boton.
 
+## FR-9 · El limite que si existe
+
+El contador de jugada pedia un denominador: "Jugada 1/n", para que se supiera de entrada
+hasta donde llega una partida. No hay tal numero. `fullmove` no tiene techo: una partida
+puede llegar a la 200 sin acercarse a nada, porque el unico limite del motor es la regla de
+las cien medias jugadas (AC-707 de 001) y ese contador **se reinicia** con cada peon, cada
+captura y cada detonacion.
+
+- **AC-901** Las jugadas sin avance tienen su propio contador, separado del numero de jugada.
+  Ponerle un denominador a `fullmove` seria escribir un limite que no existe: ni el numerador
+  ni el denominador serian lo que parecen.
+- **AC-902** Se cuenta en jugadas completas y no en medias, porque la regla se conoce por ese
+  nombre: el motor corta a las cien medias, que son las cincuenta de toda la vida.
+- **AC-903** Cuando quedan diez o menos, el contador cambia de color. Hasta ahi es un dato;
+  a partir de ahi es un aviso, y la diferencia entre las dos cosas es si hay que hacer algo.
+
+AC-901 y AC-902 estan cubiertos en `packages/client/tests/counters.test.ts`. Donde se coloca
+el contador es maquetado y se comprueba a mano.
+
 ## Lo que no cambia
 
 Estos criterios de [003-online](../003-online/spec.md) atan esta interfaz. Se enumeran aqui

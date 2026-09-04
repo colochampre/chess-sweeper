@@ -864,3 +864,15 @@ button.danger:hover:not(:disabled) {
 .board.static .cell {
   cursor: default;
 }
+
+/*
+ * El contador de jugadas sin avance. Va en el mismo rojo de siete segmentos que las minas
+ * mientras es un dato, y se enciende cuando pasa a ser un aviso.
+ */
+.counter.stall {
+  font-size: 1.05rem;
+  color: var(--muted);
+}
+.counter.stall.close {
+  color: #d9a441;
+}

@@ -3,6 +3,7 @@ import type { Color, EndReason } from '@cm/engine';
 import { MINE_SRC } from '../theme.js';
 import { useGame } from '../store.js';
 import { drawButton } from '../online.js';
+import { stallCounter } from '../counters.js';
 
 export const COLOR_NAME: Record<Color, string> = { w: 'Blancas', b: 'Negras' };
 
@@ -50,6 +51,8 @@ export function Hud() {
   const view = s.view;
   if (view === null) return null;
 
+  const stall = stallCounter(view.halfmoveClock);
+
   const draw = drawButton({
     mode: s.mode,
     status: view.status,
@@ -86,6 +89,17 @@ export function Hud() {
         <div className="counter" title="Jugada">
           <span className="label">Jugada</span>
           <span>{view.fullmove}</span>
+        </div>
+        {/* Su propio contador y no un denominador de la jugada: `fullmove` no tiene techo,
+            y esto vuelve a cero con cada peon, cada captura y cada detonacion (AC-707). */}
+        <div
+          className={`counter stall${stall.close ? ' close' : ''}`}
+          title="Jugadas sin peon, sin captura y sin detonacion. Al llegar al limite, tablas."
+        >
+          <span className="label">Sin avance</span>
+          <span>
+            {stall.moves}/{stall.limit}
+          </span>
         </div>
       </div>
 

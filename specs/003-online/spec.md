@@ -161,8 +161,13 @@ Un `socket.destroy()` a secas no deja al cliente ni un motivo: se queda en "Cone
 - **AC-1006** El codigo de sala se valida y se normaliza al escribirlo, no al enviarlo: lo
   que se ve en la caja es lo que se manda.
 
-AC-1001 a AC-1003 se comprueban a mano con las dos pestanas; viven en la capa de WebSocket
-del navegador, no en logica que se pueda aislar.
+AC-1001 a AC-1003 se comprueban a mano con dos VENTANAS, no con dos pestanas: viven en la
+capa de WebSocket del navegador y no en logica que se pueda aislar. Dos pestanas no sirven
+por lo que dice AC-1005 unas lineas mas arriba —`localStorage` es del navegador y no de la
+pestana, asi que las dos comparten un unico asiento guardado—, con lo cual la segunda
+reclama el asiento de la primera y acabas jugando contra vos mismo con el mismo color. Este
+mismo texto decia "pestanas" y mandaba hacer la prueba de la manera que el propio spec
+documenta como rota.
 
 ## FR-11 - Abandonar una partida
 

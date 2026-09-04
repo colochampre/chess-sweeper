@@ -11,13 +11,19 @@ npm test -- --reporter=verbose      # los AC salen en los nombres de los tests
 grep -rn "AC-5" packages/*/tests    # que cubre el criterio AC-5xx
 ```
 
+Los **AC no son unicos entre specs**: `AC-701` existe en 001, en 003 y en 004, y lo mismo
+pasa con `AC-503`. El grep dice que un criterio esta cubierto, pero no de que spec es: eso se
+atribuye por el contenido del test, no por su numero. Por ahi se colo que la tabla de aqui
+abajo contase 003 de menos durante meses, dejandose fuera `origin.test.ts` y
+`protocol.test.ts`.
+
 ## Estado
 
 | Spec | Alcance | Paquete | Tests |
 |---|---|---|---|
 | [001-core-rules](001-core-rules/spec.md) | Tablero, minas, revelado, trayecto, explosiones, fin de partida, tablas, eventos, informacion oculta | `@cm/engine` | 56 |
 | [002-ai](002-ai/spec.md) | Creencia sobre las minas, riesgo por movimiento, niveles de dificultad | `@cm/ai` | 21 |
-| [003-online](003-online/spec.md) | Salas, autoridad, reconexion, parametros de conexion, Durable Objects, origenes, transporte, abandono, revancha, tablas, reloj | `@cm/engine` + `@cm/worker` + `@cm/server` | 124 |
+| [003-online](003-online/spec.md) | Salas, autoridad, reconexion, parametros de conexion, Durable Objects, origenes, transporte, abandono, revancha, tablas, reloj | `@cm/engine` + `@cm/worker` + `@cm/server` | 134 |
 | [004-interfaz](004-interfaz/spec.md) | Tablero del menu, tablero sin estado, una accion primaria, lo que el menu propone, armazon comun, HUD, tiras de jugador, contador sin avance | `@cm/client` | 18 |
 
 ## Como anadir una feature

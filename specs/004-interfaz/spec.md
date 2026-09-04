@@ -52,11 +52,15 @@ podia existir dentro de una partida en curso.
   Con el emparejamiento (AC-503 de 005) SI hay rival del otro lado, asi que la primaria pasa
   a ser "Empezar partida" y "Crear sala" baja a secundaria como "Jugar con un amigo". El
   criterio no cambia —la etiqueta sigue teniendo que ser exacta—, cambia lo que es exacto.
-- **AC-305** La caja del codigo y su boton estan a la vista, no detras de un control que hay
-  que abrir. Antes "Entrar con un codigo" era un boton que desplegaba la caja al pulsarlo:
-  decia que hacia falta un codigo sin ensenar donde ponerlo, asi que lo que pide la opcion se
-  descubria DESPUES de elegirla. Un control que hay que abrir para saber que pide no esta
-  explicando nada; el sitio donde se escribe el codigo es la explicacion.
+- **AC-305** La caja del codigo y su boton estan a la vista, y la caja se explica sola: lleva
+  "Entrar con un codigo" dentro y no encima. Empezo siendo un boton que desplegaba la caja al
+  pulsarlo —decia que hacia falta un codigo sin ensenar donde ponerlo, asi que lo que pedia la
+  opcion se descubria DESPUES de elegirla— y despues una caja con etiqueta aparte, que decia
+  lo mismo dos veces. Un control que hay que abrir para saber que pide no explica nada, y el
+  sitio donde se escribe el codigo es la explicacion.
+  Un texto de ayuda dentro de la caja NO es una etiqueta: desaparece al escribir y no se
+  anuncia igual, asi que el campo lleva ademas un nombre accesible. Y ese texto lleva su
+  propio estilo, porque el de la caja esta pensado para que un codigo se lea como un codigo.
 
 AC-301, AC-302, AC-304 y AC-305 son decisiones de maquetado y de texto: se comprueban a mano,
 igual

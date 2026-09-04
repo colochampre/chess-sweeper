@@ -125,28 +125,27 @@ export function Menu() {
             <small>Te damos un codigo para pasarle</small>
           </button>
 
-          {/* El propio control dice lo que pide. Antes era un boton que desplegaba la caja
-              al pulsarlo: decia "Entrar con un codigo" sin ensenar ninguno, y que hacia
-              falta uno se descubria despues. Un control que hay que abrir para saber que
-              pide no explica nada (AC-305). */}
-          <div className="field join">
-            <span className="label">Entrar con un codigo</span>
-            <div className="join-row">
-              <input
-                placeholder="CODIGO"
-                value={joinCode}
-                maxLength={ROOM_CODE_LENGTH}
-                // AC-1006: se normaliza al escribir, no al enviar, asi lo que se ve en la
-                // caja es exactamente lo que se va a mandar y el boton no miente.
-                onChange={(e) => setJoinCode(normalizeRoomCode(e.target.value))}
-                onKeyDown={(e) =>
-                  e.key === 'Enter' && isValidRoomCode(joinCode) && joinOnline(joinCode)
-                }
-              />
-              <button disabled={!isValidRoomCode(joinCode)} onClick={() => joinOnline(joinCode)}>
-                Unirse
-              </button>
-            </div>
+          {/* El propio control dice lo que pide, sin etiqueta aparte: el sitio donde se
+              escribe el codigo es la explicacion (AC-305). El aria-label existe porque un
+              placeholder NO es una etiqueta —se va al escribir y no se anuncia igual—, y
+              ::placeholder lleva su propio estilo porque el del input esta pensado para que
+              un codigo se lea como un codigo, no para una frase. */}
+          <div className="join-row">
+            <input
+              placeholder="Entrar con un codigo"
+              aria-label="Entrar con un codigo"
+              value={joinCode}
+              maxLength={ROOM_CODE_LENGTH}
+              // AC-1006: se normaliza al escribir, no al enviar, asi lo que se ve en la
+              // caja es exactamente lo que se va a mandar y el boton no miente.
+              onChange={(e) => setJoinCode(normalizeRoomCode(e.target.value))}
+              onKeyDown={(e) =>
+                e.key === 'Enter' && isValidRoomCode(joinCode) && joinOnline(joinCode)
+              }
+            />
+            <button disabled={!isValidRoomCode(joinCode)} onClick={() => joinOnline(joinCode)}>
+              Unirse
+            </button>
           </div>
 
           {/* El boton ES el modo: no se elige uno y despues se pulsa otra cosa. */}

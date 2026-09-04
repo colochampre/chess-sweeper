@@ -22,6 +22,8 @@ import {
   createRoom,
   forfeitAbsent,
   generateRoomCode,
+  matchKey,
+  resolveMatch,
   isOriginAllowed,
   isProtocolCurrent,
   isRoomError,
@@ -45,6 +47,7 @@ import {
   type ClientMessage,
   type Color,
   type GameEvent,
+  type QueueEntry,
   type RoomState,
   type Seat,
   type ServerMessage,
@@ -84,6 +87,16 @@ export interface RunningServer {
 export async function startServer(options: ServerOptions = {}): Promise<RunningServer> {
   const clientDist = options.clientDist ?? DEFAULT_DIST;
   const rooms = new Map<string, RoomState>();
+  /**
+   * La cola de emparejamiento: por cada combinacion de ajustes, la sala que esta esperando
+   * rival (AC-103 de 005). La mantiene este pegamento y no la sala, que sigue sin saber que
+   * existe una cola (AC-401).
+   */
+  const waiting = new Map<string, QueueEntry>();
+  /** Da de baja la sala de la cola, este donde este. Se llama al llenarse y al vaciarse. */
+  const unqueue = (code: string): void => {
+    for (const [key, entry] of waiting) if (entry.code === code) waiting.delete(key);
+  };
   /** Sockets sentados en cada sala, para poder difundir. */
   const members = new Map<string, Map<Color, WebSocket>>();
 
@@ -277,13 +290,33 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       // que el jugador puede arreglar solo. Ver AC-905.
       if (intent === null) return refuse(ws, PROTOCOL_STALE_MESSAGE);
 
-      if (intent.a === 'create') {
+      // `match` se resuelve aqui a una de las dos acciones de siempre: si hay alguien
+      // esperando con estos ajustes se entra a su sala, y si no se crea una y se espera
+      // (AC-201 de 005). No hay un tipo de sala nuevo.
+      if (intent.a === 'match') {
+        const key = matchKey(intent);
+        const outcome = resolveMatch(waiting.get(key) ?? null, Date.now());
+        if (outcome.a === 'join') {
+          // La entrada se descarta pase lo que pase: si la sala ya no admite a nadie no se
+          // vuelve a ofrecer, y si admite es porque acaba de llenarse (AC-402).
+          waiting.delete(key);
+          const room = rooms.get(outcome.code);
+          if (room !== undefined) {
+            const taken = takeSeat(room);
+            if (!isRoomError(taken)) return seat(ws, room, taken);
+          }
+        }
+      }
+
+      if (intent.a === 'create' || intent.a === 'match') {
         let code = generateRoomCode();
         while (rooms.has(code)) code = generateRoomCode();
         const room = createRoom(code, intent);
         rooms.set(code, room);
         const taken = takeSeat(room);
         if (isRoomError(taken)) return refuse(ws, taken.error);
+        // Quien no encontro rival se queda esperando por sus ajustes.
+        if (intent.a === 'match') waiting.set(matchKey(intent), { code, since: Date.now() });
         return seat(ws, room, taken);
       }
 
@@ -397,6 +430,9 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
     socket.on('close', () => {
       const current = sessions.get(socket);
       if (current) {
+        // Quien esperaba rival deja de estar disponible ahora, no cuando caduque nada
+        // (AC-301 y AC-302 de 005). Si la sala ya se habia llenado, esto no encuentra nada.
+        unqueue(current.room.code);
         const roomMembers = members.get(current.room.code);
         if (roomMembers?.get(current.color) === socket) roomMembers.delete(current.color);
         // Solo cuenta si esta conexion no habia sido ya reemplazada por otra.
@@ -435,6 +471,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       if (isStale(room)) {
         rooms.delete(code);
         members.delete(code);
+        unqueue(code);
         const timer = flagTimers.get(code);
         if (timer !== undefined) clearTimeout(timer);
         flagTimers.delete(code);

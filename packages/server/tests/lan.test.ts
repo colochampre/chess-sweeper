@@ -625,3 +625,63 @@ describe('FR-14 la oferta viaja con la jugada', () => {
     guest.bye();
   });
 });
+
+describe('FR-2 emparejamiento por el cable', () => {
+  const MATCH = 'a=match&difficulty=normal&boardSize=8&hostColor=random&timeControl=none';
+
+  it('AC-201: dos que piden lo mismo acaban en la misma sala', async () => {
+    const first = connect(MATCH);
+    const a = await first.waitFor('seated');
+    if (a.t !== 'seated') return;
+
+    const second = connect(MATCH);
+    const b = await second.waitFor('seated');
+    if (b.t !== 'seated') return;
+
+    // Misma sala y un color cada uno: emparejar se resuelve a un create y un join de los de
+    // siempre, asi que el reparto lo hace la sala como en AC-102 de 003.
+    expect(b.code).toBe(a.code);
+    expect(b.color).not.toBe(a.color);
+
+    // Y el rival esta presente de verdad, que es lo que no cubre ningun test de logica.
+    await first.waitFor('opponent', (m) => m.t === 'opponent' && m.connected);
+
+    first.bye();
+    second.bye();
+  });
+
+  it('AC-101: quien pide otros ajustes no empareja, abre su propia sala', async () => {
+    const first = connect(MATCH);
+    const a = await first.waitFor('seated');
+    if (a.t !== 'seated') return;
+
+    const other = connect(MATCH.replace('timeControl=none', 'timeControl=10%2B5'));
+    const b = await other.waitFor('seated');
+    if (b.t !== 'seated') return;
+
+    expect(b.code).not.toBe(a.code);
+
+    first.bye();
+    other.bye();
+  });
+
+  it('AC-301: quien se va deja de estar disponible, y el siguiente no hereda su sala', async () => {
+    const first = connect(MATCH);
+    const a = await first.waitFor('seated');
+    if (a.t !== 'seated') return;
+
+    // Se va antes de que llegue nadie. Sin dar de baja la entrada, el siguiente se sentaria
+    // en su sala y esperaria a alguien que no vuelve, para ganar por abandono a los dos
+    // minutos una partida que nunca empezo.
+    first.bye();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const second = connect(MATCH);
+    const b = await second.waitFor('seated');
+    if (b.t !== 'seated') return;
+
+    expect(b.code).not.toBe(a.code);
+
+    second.bye();
+  });
+});

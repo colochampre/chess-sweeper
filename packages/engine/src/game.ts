@@ -10,6 +10,7 @@ import {
   opponent,
 } from './legality.js';
 import { computeAdjacency, countMines, placeMines } from './minefield.js';
+import { positionKey, timesSeen } from './repetition.js';
 import { movePath } from './path.js';
 import { revealFrom, revealFromAllPieces } from './reveal.js';
 import { createRng } from './rng.js';
@@ -54,9 +55,15 @@ export function createGame(overrides: Partial<GameConfig> = {}): GameState {
     inCheck: false,
     captured: [],
     history: [],
+    positions: {},
   };
 
   revealFromAllPieces(state); // AC-302
+  // Deducidos y no afirmados, igual que hace cada jugada: para el tablero inicial da lo
+  // mismo, y asi la posicion sembrada se calcula exactamente igual que todas las siguientes.
+  state.castling = computeCastlingRights(state);
+  // La posicion de partida cuenta como la primera vez que se da (AC-708).
+  state.positions[positionKey(state)] = 1;
   return state;
 }
 
@@ -82,6 +89,7 @@ export function cloneState(s: GameState): GameState {
     inCheck: s.inCheck,
     captured: s.captured.slice(),
     history: s.history.slice(),
+    positions: { ...s.positions },
   };
 }
 
@@ -296,8 +304,11 @@ export function applyMove(state: GameState, move: Move): MoveResult {
   }
 
   next.castling = computeCastlingRights(next);
-  next.halfmoveClock =
-    piece.type === 'p' || captureHappened || detonatedAt !== null ? 0 : next.halfmoveClock + 1;
+  // Un peon avanzado, una pieza capturada o una mina detonada no se deshacen: desde aqui
+  // ninguna posicion anterior puede volver a darse. Es el disparador de AC-707 y de AC-710.
+  const irreversible = piece.type === 'p' || captureHappened || detonatedAt !== null;
+  next.halfmoveClock = irreversible ? 0 : next.halfmoveClock + 1;
+  if (irreversible) next.positions = {};
   if (state.turn === 'b') next.fullmove += 1;
   next.history.push(record);
 
@@ -312,6 +323,8 @@ export function applyMove(state: GameState, move: Move): MoveResult {
     next.endReason = 'king-destroyed';
   } else {
     next.turn = opponent(state.turn);
+    // Con el turno ya cambiado: quien mueve forma parte de la posicion (AC-709).
+    next.positions[positionKey(next)] = timesSeen(next) + 1;
     next.inCheck = isKingInCheck(next, next.turn);
     if (findKing(next, next.turn) === -1) {
       next.status = 'king-destroyed';
@@ -325,8 +338,12 @@ export function applyMove(state: GameState, move: Move): MoveResult {
       next.status = 'draw';
       next.winner = null;
       next.endReason = 'insufficient-material';
+    } else if (timesSeen(next) >= 3) {
+      next.status = 'draw'; // AC-708
+      next.winner = null;
+      next.endReason = 'threefold';
     } else if (next.halfmoveClock >= 100) {
-      next.status = 'draw';
+      next.status = 'draw'; // AC-707
       next.winner = null;
       next.endReason = 'fifty-move';
     }
@@ -376,7 +393,7 @@ export function toView(state: GameState, as: Color): PlayerView {
 export function hypotheticalState(view: PlayerView, mines?: boolean[]): GameState {
   const n = view.board.length;
   const minefield = mines ? mines.slice() : new Array<boolean>(n).fill(false);
-  return {
+  const state: GameState = {
     config: view.config,
     board: view.board.slice(),
     mines: minefield,
@@ -397,7 +414,12 @@ export function hypotheticalState(view: PlayerView, mines?: boolean[]): GameStat
     inCheck: view.inCheck,
     captured: view.captured.slice(),
     history: view.history.slice(),
+    positions: {},
   };
+  // El bot no recibe la cuenta de repeticiones (AC-711), asi que empieza la suya: dentro de
+  // su busqueda cuenta lo que el mismo repite, no lo que ya llevaba la partida real.
+  state.positions[positionKey(state)] = 1;
+  return state;
 }
 
 export function toggleFlag(state: GameState, color: Color, sq: Square): GameState {

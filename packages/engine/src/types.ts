@@ -56,6 +56,7 @@ export type EndReason =
   | 'both-kings-destroyed'
   | 'insufficient-material'
   | 'fifty-move'
+  | 'threefold'
   /** Un jugador se fue de la partida, o se ausento el tiempo suficiente. Solo en online. */
   | 'abandoned'
   /** Los dos jugadores acordaron tablas. Solo en online: hace falta con quien acordar. */
@@ -108,11 +109,16 @@ export interface GameState {
   inCheck: boolean;
   captured: Piece[];
   history: MoveRecord[];
+  /**
+   * Veces que se ha dado cada posicion desde el ultimo peon, captura o detonacion (AC-710).
+   * No sale del motor: `PlayerView` la omite, como omite las minas (AC-711).
+   */
+  positions: Record<string, number>;
 }
 
 /** Proyeccion del estado para un jugador concreto: sin minas y solo con sus banderas. */
 export interface PlayerView
-  extends Omit<GameState, 'mines' | 'flags'> {
+  extends Omit<GameState, 'mines' | 'flags' | 'positions'> {
   as: Color;
   flags: boolean[];
   /** Minas que quedan sin detonar: informacion publica, como el contador del Buscaminas. */

@@ -77,9 +77,10 @@ escribio FR-14: el reloj no existia todavia. Ya existe, y un menu que propone la
 usarlo esta proponiendo la de antes.
 
 - **AC-401** El reloj se enciende con una casilla y se elige con botones. La casilla viene
-  marcada; los botones —5, 10, 15, 30 minutos y 1 hora— van de la mas corta a la mas larga y
-  se ofrecen a la vista y no en un desplegable: son cortos y caben, asi que esconderlos detras
-  de un clic solo anadia un paso para leer lo mismo.
+  marcada; los botones —5m, 10m, 15m, 30m y 1h— van de la mas corta a la mas larga y se
+  ofrecen a la vista y no en un desplegable: son cortos y caben, asi que esconderlos detras de
+  un clic solo anadia un paso para leer lo mismo. Las etiquetas van abreviadas para que los
+  cinco entren en una fila: partidas en dos lineas se leen peor que abreviadas.
   Jugar sin reloj NO es uno de los botones. Puesto entre ellos, elegirlo borraba de paso el
   control que tenias puesto; como casilla, apagar y volver a encender lo recuerda. Y sigue
   existiendo, que es lo que importa: proponer no es imponer, y contra la maquina y en dos

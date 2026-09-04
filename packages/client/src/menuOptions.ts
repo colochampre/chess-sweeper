@@ -27,20 +27,20 @@ export const MODES: Option<Mode>[] = [
  * enciende o apaga el reloj entero (AC-401). Puesta entre los botones, elegirla borraba de
  * paso el control que tenias elegido; como casilla, apagar y volver a encender lo recuerda.
  *
- * Son controles SIN incremento a proposito. La etiqueta dice "10 min" y tiene que ser cierta:
- * con 10+5 sumarias cinco segundos por jugada y una partida de "10 min" duraria bastante mas
- * (AC-404). El que quiera incremento pide una sala por codigo; el conjunto del motor los
+ * Son controles SIN incremento a proposito. La etiqueta dice "10m" y tiene que ser cierta:
+ * con 10+5 sumarias cinco segundos por jugada y una partida de "10m" duraria bastante mas
+ * (AC-404). Abreviadas para que los cinco botones entren en una fila sin partirse. El que quiera incremento pide una sala por codigo; el conjunto del motor los
  * sigue teniendo todos.
  *
  * Que el menu proponga 10+0 no cambia lo que asume el servidor: un `create` sin control de
  * tiempo sigue creando una sala sin reloj (AC-403, y AC-1401 de 003).
  */
 export const TIME_OPTIONS: Option<TimeControl>[] = [
-  { value: '5+0', label: '5 min' },
-  { value: '10+0', label: '10 min' },
-  { value: '15+0', label: '15 min' },
-  { value: '30+0', label: '30 min' },
-  { value: '60+0', label: '1 h' },
+  { value: '5+0', label: '5m' },
+  { value: '10+0', label: '10m' },
+  { value: '15+0', label: '15m' },
+  { value: '30+0', label: '30m' },
+  { value: '60+0', label: '1h' },
 ];
 
 /**

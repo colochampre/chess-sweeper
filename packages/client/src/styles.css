@@ -202,12 +202,18 @@ button.danger:hover:not(:disabled) {
   line-height: 1.45;
 }
 
-/* Cinco opciones cortas: se reparten la fila y bajan solas si no entran. */
-.field.clock .options {
-  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+/*
+ * `time` y no `clock`: `.clock` es el reloj de las tiras del jugador, con su caja oscura y
+ * sus cifras tabulares, y llamar igual a esta seccion le pegaba ese aspecto a un grupo de
+ * botones que no es un reloj.
+ *
+ * Cinco opciones abreviadas: entran en una fila sin partirse en dos lineas.
+ */
+.field.time .options {
+  grid-template-columns: repeat(auto-fit, minmax(52px, 1fr));
 }
-.field.clock .option {
-  padding: 0.55rem 0.3rem;
+.field.time .option {
+  padding: 0.55rem 0.4rem;
 }
 /* La casilla va en la etiqueta: enciende el reloj, los botones eligen cual. */
 .field .label.toggle {

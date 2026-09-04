@@ -95,7 +95,7 @@ export function Menu() {
         {/* La casilla enciende el reloj entero y los botones eligen cual. "Sin reloj" era uno
             de los botones, y elegirlo borraba de paso el control que tenias puesto; asi,
             apagar y volver a encender lo recuerda (AC-401). */}
-        <section className="field clock">
+        <section className="field time">
           <label className="label toggle">
             <input
               type="checkbox"

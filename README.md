@@ -205,4 +205,5 @@ y cambia `PIECE_SET` en `packages/client/src/theme.ts`. Detalles en
 - El bot no tiene busqueda de quiescencia ni tabla de transposicion, y se le nota en los
   finales: mas de la mitad de las partidas bot contra bot acaban en tablas por la regla de
   50 jugadas.
-- El online no limita los intentos de `join` por IP: ver [`docs/deploy.md`](docs/deploy.md).
+- El limite por IP se cuenta en cada centro de datos por separado, no en total: quien reparta
+  el ataque entre varios multiplica su presupuesto. Ver [`docs/deploy.md`](docs/deploy.md).

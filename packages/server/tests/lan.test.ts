@@ -9,7 +9,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket, { type ClientOptions } from 'ws';
-import { ABSENCE_FORFEIT_MS, PROTOCOL_VERSION, type ServerMessage } from '@cm/engine';
+import {
+  ABSENCE_FORFEIT_MS,
+  PROTOCOL_VERSION,
+  RESUME_REFUSED_MESSAGE,
+  type ServerMessage,
+} from '@cm/engine';
 import { startServer, type RunningServer } from '../src/server.js';
 
 let server: RunningServer;
@@ -201,6 +206,53 @@ describe('FR-9 los rechazos se explican', () => {
   it('AC-904: parametros invalidos se rechazan antes del apreton de manos', async () => {
     const client = connect('a=borrar-todo&code=ABC234');
     expect(await client.opened).toBe(false);
+  });
+
+  it('AC-906: resume no distingue sala inexistente de token equivocado', async () => {
+    const someUuid = '2f1c9a7e-3b4d-4c5e-8f90-1a2b3c4d5e6f';
+
+    // Razon 1: la sala no existe.
+    const missingRoom = connect(`a=resume&code=ZZZZZZ&token=${someUuid}`);
+    const missingRoomError = await missingRoom.waitFor('error');
+
+    // Razon 2: la sala existe, pero el token no es el de ningun asiento suyo.
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const wrongToken = connect(`a=resume&code=${seated.code}&token=${someUuid}`);
+    const wrongTokenError = await wrongToken.waitFor('error');
+
+    // Las dos razones contestan el mismo mensaje, y es el que exporta el motor: no uno que
+    // cada transporte redacte por su cuenta y pueda ir divergiendo.
+    expect(missingRoomError.t === 'error' && missingRoomError.message).toBe(
+      RESUME_REFUSED_MESSAGE,
+    );
+    expect(wrongTokenError.t === 'error' && wrongTokenError.message).toBe(RESUME_REFUSED_MESSAGE);
+
+    host.bye();
+  });
+
+  it('AC-901/AC-103: join si distingue sala inexistente de sala llena', async () => {
+    const missingRoom = connect('a=join&code=ZZZZZZ');
+    const missingRoomError = await missingRoom.waitFor('error');
+
+    const host = connect(CREATE);
+    const seated = await host.waitFor('seated');
+    if (seated.t !== 'seated') return;
+    const guest = connect(`a=join&code=${seated.code}`);
+    await guest.waitFor('seated');
+    // Con los dos asientos ocupados, un tercero se encuentra la sala llena.
+    const thirdWheel = connect(`a=join&code=${seated.code}`);
+    const fullRoomError = await thirdWheel.waitFor('error');
+
+    expect(missingRoomError.t === 'error' && missingRoomError.message).toMatch(/No existe/i);
+    expect(fullRoomError.t === 'error' && fullRoomError.message).toMatch(/completa/i);
+    expect(missingRoomError.t === 'error' && missingRoomError.message).not.toBe(
+      fullRoomError.t === 'error' ? fullRoomError.message : undefined,
+    );
+
+    host.bye();
+    guest.bye();
   });
 });
 

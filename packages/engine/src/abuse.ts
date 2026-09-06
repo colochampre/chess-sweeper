@@ -12,10 +12,11 @@
  *  - `create` y `match` son gastar Durable Objects nuevos, que es lo que raciona el plan
  *    gratuito.
  * `resume` entra con `join`, aunque traiga un token opaco de 36 caracteres que no se adivina
- * goteando conexiones. Lo que se adivina es el CODIGO, que `resume` tambien lleva, y la sala
- * contesta distinto segun exista o no: «No existe ninguna sala con ese codigo» frente a «Ese
- * asiento no es tuyo». Esa diferencia dice si el codigo era bueno sin necesidad de acertar el
- * token, asi que dejar `resume` fuera seria dejar la misma puerta con otro nombre.
+ * goteando conexiones. Lo que se adivina es el CODIGO, que `resume` tambien lleva. La sala ya
+ * no contesta distinto segun exista o no -las dos razones de rechazo comparten
+ * `RESUME_REFUSED_MESSAGE`, ver `protocol.ts`-, pero el limitador se queda igual: es defensa
+ * en profundidad contra lo que el mensaje ya no revela pero el tiempo de respuesta todavia
+ * podria, y adivinar el codigo sigue siendo el mismo ataque aunque la respuesta ya no lo diga.
  */
 import type { ConnectIntent } from './protocol.js';
 

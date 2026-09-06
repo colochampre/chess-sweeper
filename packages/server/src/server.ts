@@ -17,6 +17,7 @@ import {
   CLOSE_REFUSED,
   CLOSE_REPLACED,
   PROTOCOL_STALE_MESSAGE,
+  RESUME_REFUSED_MESSAGE,
   WS_PATH,
   absenceMsLeft,
   createRoom,
@@ -321,7 +322,15 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
       }
 
       const room = rooms.get(intent.code);
-      if (room === undefined) return refuse(ws, 'No existe ninguna sala con ese codigo');
+      if (room === undefined) {
+        // `resume` contesta lo mismo que un token equivocado (RESUME_REFUSED_MESSAGE): que la
+        // sala no exista no puede distinguirse desde fuera de que exista con otro asiento.
+        // `join` si dice la verdad, porque el codigo lo escribe una persona a mano.
+        return refuse(
+          ws,
+          intent.a === 'resume' ? RESUME_REFUSED_MESSAGE : 'No existe ninguna sala con ese codigo',
+        );
+      }
 
       const taken = intent.a === 'join' ? takeSeat(room) : resumeSeat(room, intent.token);
       if (isRoomError(taken)) return refuse(ws, taken.error);

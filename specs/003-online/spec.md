@@ -142,6 +142,18 @@ Un `socket.destroy()` a secas no deja al cliente ni un motivo: se queda en "Cone
   que abre este FR. Aqui hace falta que el motivo llegue, porque el arreglo lo tiene que
   hacer el jugador: recargar. Antes del apreton de manos se rechaza lo que el jugador no
   puede arreglar (AC-902, AC-904); despues, lo que si.
+- **AC-906** `resume` es la unica accion que NO sigue este FR: las dos razones por las que
+  puede fallar -la sala no existe, o existe pero el token no es el de ese asiento- contestan
+  el mismo motivo (`RESUME_REFUSED_MESSAGE`, definido una vez en `@cm/engine` y usado por los
+  dos transportes). Es a proposito y va al reves que AC-901: aqui el motivo NO se explica.
+  El token de `resume` no lo escribe una persona, lo guarda el propio cliente, asi que no hay
+  ningun jugador legitimo al que ayudarle a distinguir los dos casos. Y quien no es el
+  jugador legitimo es exactamente a quien no hay que ayudarle: contestar distinto convertia
+  la accion en un oraculo para adivinar codigos de sala validos sin necesitar acertar ningun
+  token, sorteando lo que un codigo inexistente delata en AC-901 (ver `abuse.ts`, que ya
+  documentaba el riesgo antes de que se cerrara). `join` si sigue explicando su rechazo: ahi
+  el codigo lo escribe una persona a mano, y saber si la sala esta llena o no existe es
+  informacion que le sirve para decidir que hacer.
 
 ## FR-10 · Politica de reconexion del cliente
 

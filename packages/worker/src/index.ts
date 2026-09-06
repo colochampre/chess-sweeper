@@ -27,6 +27,7 @@ import {
   matchKey,
   resolveMatch,
   PROTOCOL_STALE_MESSAGE,
+  RESUME_REFUSED_MESSAGE,
   isOriginAllowed,
   isProtocolCurrent,
   isRoomError,
@@ -441,7 +442,13 @@ export class Room implements DurableObject {
     const unavailable = (): Response => new Response('Sala no disponible', { status: 409 });
 
     if (this.room === null) {
-      return routable ? unavailable() : this.refuse('No existe ninguna sala con ese codigo');
+      if (routable) return unavailable();
+      // `resume` contesta lo mismo que un token equivocado (RESUME_REFUSED_MESSAGE): que la
+      // sala no exista no puede distinguirse desde fuera de que exista con otro asiento.
+      // `join` si dice la verdad, porque el codigo lo escribe una persona a mano.
+      return this.refuse(
+        intent.a === 'resume' ? RESUME_REFUSED_MESSAGE : 'No existe ninguna sala con ese codigo',
+      );
     }
 
     const seat =

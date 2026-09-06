@@ -22,6 +22,17 @@ export const PROTOCOL_PARAM = 'v';
 export const PROTOCOL_STALE_MESSAGE = 'Esta version del juego quedo vieja: recarga la pagina.';
 
 /**
+ * Unico motivo para las dos formas en que `resume` puede fallar: la sala no existe, o existe
+ * pero el token no es el de ese asiento. Antes cada una contestaba distinto, y eso convertia
+ * la accion en un oraculo: probando un codigo con cualquier UUID bien formado como token, la
+ * respuesta decia si el codigo era de una sala real sin necesitar acertar el token (ver
+ * `packages/engine/src/abuse.ts`, que ya documentaba el riesgo). `join` no comparte este
+ * mensaje a proposito: ahi el codigo lo escribe una persona a mano, y saber si la sala esta
+ * llena o no existe es informacion que le sirve para decidir que hacer.
+ */
+export const RESUME_REFUSED_MESSAGE = 'La sala no existe o el asiento no es tuyo';
+
+/**
  * Si esa conexion habla nuestra misma version. Sin el parametro tampoco vale: un cliente que
  * no lo manda es anterior a que existiera, que es justamente uno viejo.
  */

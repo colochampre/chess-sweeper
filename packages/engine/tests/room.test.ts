@@ -26,6 +26,7 @@ import {
   playMove,
   rematch,
   requestRematch,
+  RESUME_REFUSED_MESSAGE,
   resumeSeat,
   takeSeat,
   viewFor,
@@ -128,7 +129,13 @@ describe('FR-3 reconexion', () => {
   it('AC-303: un token ajeno no recupera nada', () => {
     const r = room();
     takeSeat(r);
-    expect(isRoomError(resumeSeat(r, 'token-inventado'))).toBe(true);
+    const result = resumeSeat(r, 'token-inventado');
+    expect(isRoomError(result)).toBe(true);
+    // AC-906 de 003: el mismo mensaje que una sala inexistente, no uno propio de token
+    // equivocado. Es la fuente compartida que usan los dos transportes; si un transporte
+    // dejara de leerla de aqui, este test no lo detectaria, pero un cambio accidental del
+    // mensaje en si mismo si.
+    if (isRoomError(result)) expect(result.error).toBe(RESUME_REFUSED_MESSAGE);
   });
 
   it('AC-304: al desconectar, el asiento queda marcado', () => {

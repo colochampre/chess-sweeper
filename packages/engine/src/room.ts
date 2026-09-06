@@ -12,7 +12,7 @@
 import { applyMove, canDeliverMate, createGame, toView } from './game.js';
 import { configFor } from './config.js';
 import { randomSeed } from './rng.js';
-import type { RoomSettings } from './protocol.js';
+import { RESUME_REFUSED_MESSAGE, type RoomSettings } from './protocol.js';
 import type { Color, GameEvent, GameState, Move, PlayerView } from './types.js';
 import {
   chargeMove,
@@ -194,7 +194,9 @@ export function resumeSeat(room: RoomState, token: string, now = Date.now()): Se
       return seat;
     }
   }
-  return { error: 'Ese asiento no es tuyo' };
+  // Mismo mensaje que una sala inexistente (ver RESUME_REFUSED_MESSAGE): quien prueba codigos
+  // no puede distinguir la sala que no existe de la sala que si, con un token equivocado.
+  return { error: RESUME_REFUSED_MESSAGE };
 }
 
 /** Los dos asientos ocupados y conectados: es cuando puede correr el reloj. */

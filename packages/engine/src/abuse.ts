@@ -43,6 +43,23 @@ export function ipRateLimitKindFor(action: ConnectIntent['a']): IpRateLimitKind 
   }
 }
 
+/** Las acciones validas, para reconocerlas antes de haberlas validado del todo. */
+const CONNECT_ACTIONS: readonly ConnectIntent['a'][] = ['join', 'resume', 'create', 'match'];
+
+/**
+ * Igual que `ipRateLimitKindFor`, pero a partir del parametro `a` en crudo, antes de validar
+ * la peticion entera. Hace falta porque el limitador tiene que actuar ANTES que el resto de
+ * comprobaciones: la de version rechaza por el socket (AC-905) y eso ya cuesta un
+ * `WebSocketPair`, justo lo que este limitador existe para no pagar en cada intento.
+ *
+ * Lo que no se reconoce -un `a` desconocido, o directamente ausente- cae en el limitador mas
+ * estrecho. Quien manda basura no merece el presupuesto mas holgado de los dos.
+ */
+export function ipRateLimitKindForParam(rawAction: string | null): IpRateLimitKind {
+  const action = CONNECT_ACTIONS.find((known) => known === rawAction);
+  return action === undefined ? IP_RATE_LIMIT_KIND.JOIN : ipRateLimitKindFor(action);
+}
+
 /**
  * Clave de limitado a partir de lo que traiga `CF-Connecting-IP`, o `null` si no hay nada
  * usable. Sin cabecera -desarrollo local, tests, un llamador que no pasa por Cloudflare- no

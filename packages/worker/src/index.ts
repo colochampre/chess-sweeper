@@ -38,7 +38,7 @@ import {
   playMove,
   IP_RATE_LIMIT_KIND,
   ipRateLimitKey,
-  ipRateLimitKindFor,
+  ipRateLimitKindForParam,
   clockMsLeft,
   clockRunningFor,
   declineDraw,
@@ -52,7 +52,6 @@ import {
   viewFor,
   type ClientMessage,
   type Color,
-  type ConnectIntent,
   type GameEvent,
   type MatchOutcome,
   type QueueEntry,
@@ -143,12 +142,8 @@ function originAllowed(request: Request, env: Env): boolean {
  * deja pasar. Lo mismo si no llega `CF-Connecting-IP`: sin Cloudflare delante no hay IP que
  * limitar, y fallar cerrado bloquearia a todo el mundo por igual en vez de a quien abusa.
  */
-async function ipRateLimited(
-  request: Request,
-  env: Env,
-  action: ConnectIntent['a'],
-): Promise<boolean> {
-  const kind = ipRateLimitKindFor(action);
+async function ipRateLimited(request: Request, env: Env, rawAction: string | null): Promise<boolean> {
+  const kind = ipRateLimitKindForParam(rawAction);
 
   const key = ipRateLimitKey(request.headers.get('CF-Connecting-IP'));
   if (key === null) return false;
@@ -215,6 +210,15 @@ export default {
       return new Response('Origen no permitido', { status: 403 });
     }
 
+    // Antes que nada de lo que cuesta algo, y por eso con el parametro `a` todavia en crudo.
+    // Las comprobaciones de arriba -Upgrade y origen- son sincronas y gratis, pero la de
+    // version de aqui abajo NO lo es: rechaza por el socket (AC-905) y eso ya monta un
+    // `WebSocketPair`. Dejar el limitador despues abria una puerta para gastar sockets a
+    // ritmo libre sin mandar siquiera un codigo de sala valido.
+    if (await ipRateLimited(request, env, url.searchParams.get('a'))) {
+      return new Response('Demasiadas conexiones', { status: 429, headers: { 'Retry-After': '10' } });
+    }
+
     // La version manda sobre el resto: a un cliente viejo, "parametros invalidos" no le sirve
     // de nada, y ademas sus parametros pueden ser invalidos justo por ser viejo. El rechazo
     // va por el socket y no como HTTP porque el navegador no le deja leer al cliente el
@@ -223,14 +227,6 @@ export default {
 
     const intent = parseIntent(url.searchParams);
     if (intent === null) return new Response('Parametros de conexion invalidos', { status: 400 });
-
-    // Justo aqui y no antes: las comprobaciones de arriba (Upgrade, origen, version,
-    // parametros) son sincronas y gratis, asi que filtran primero la basura sin pagar la
-    // llamada al binding. Y justo aqui y no despues: todavia no se hizo ningun trabajo de
-    // verdad -ni Durable Object, ni apreton de manos-, que es lo que este limitador protege.
-    if (await ipRateLimited(request, env, intent.a)) {
-      return new Response('Demasiadas conexiones', { status: 429 });
-    }
 
     // `match` se resuelve aqui a una de las dos acciones de siempre, y por eso tiene que
     // ser antes del apreton de manos: con `match` no hay codigo que mirar todavia, y hay

@@ -141,12 +141,22 @@ export class OnlineClient {
       if (this.closedByUs) return this.handlers.onClose(false, true);
 
       const seat = loadSeat();
-      // Solo se reintenta una conexion que LLEGO A SENTARSE. Si nunca se sento, el problema
-      // no es la red y volver a intentarlo no arregla nada: reintentar un `create` fabricaria
-      // una sala huerfana por intento, y reintentar un `join` fallido acabaria entrando por
-      // `resume` a una partida anterior que no tiene nada que ver con la que se pidio.
+      // Se reintenta una conexion que llego a sentarse... o un `resume`, aunque no llegara.
+      // Lo que no se reintenta es `create` -fabricaria una sala huerfana por intento- ni un
+      // `join` fallido, que acabaria entrando por `resume` a una partida anterior que no
+      // tiene nada que ver con la que se pidio.
+      //
+      // El `resume` hace falta porque volver a la partida tras recargar la pestana empieza
+      // con `seated` en false: el servidor puede rechazar ese primer intento por ritmo -una
+      // IP compartida, un CGNAT movil- y sin reintento el jugador se queda mirando un error
+      // mientras se le agota el presupuesto de ausencia y pierde por abandono. Reintentarlo
+      // es seguro: `resume` pide un asiento que ya existe, no crea nada.
+      const resuming = this.intent?.a === 'resume';
       const retry =
-        this.seated && seat !== null && event.code !== CLOSE_REFUSED && this.attempts < 6;
+        (this.seated || resuming) &&
+        seat !== null &&
+        event.code !== CLOSE_REFUSED &&
+        this.attempts < 6;
       this.handlers.onClose(retry, false);
       if (!retry) return;
 

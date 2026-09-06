@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { IP_RATE_LIMIT_KIND, ipRateLimitKey, ipRateLimitKindFor } from '@cm/engine';
+import {
+  IP_RATE_LIMIT_KIND,
+  ipRateLimitKey,
+  ipRateLimitKindFor,
+  ipRateLimitKindForParam,
+} from '@cm/engine';
 
 describe('control de abuso por IP', () => {
   it('join cae en el limitador de join: es el que adivina codigos de sala', () => {
@@ -19,6 +24,19 @@ describe('control de abuso por IP', () => {
     const actions = ['join', 'resume', 'create', 'match'] as const;
     const kinds = Object.values(IP_RATE_LIMIT_KIND);
     for (const action of actions) expect(kinds).toContain(ipRateLimitKindFor(action));
+  });
+
+  it('el parametro en crudo reconoce las acciones validas igual que el intento ya validado', () => {
+    expect(ipRateLimitKindForParam('join')).toBe(IP_RATE_LIMIT_KIND.JOIN);
+    expect(ipRateLimitKindForParam('resume')).toBe(IP_RATE_LIMIT_KIND.JOIN);
+    expect(ipRateLimitKindForParam('create')).toBe(IP_RATE_LIMIT_KIND.CREATE);
+    expect(ipRateLimitKindForParam('match')).toBe(IP_RATE_LIMIT_KIND.CREATE);
+  });
+
+  it('lo que no se reconoce cae en el limitador mas estrecho, no en el mas holgado', () => {
+    for (const raw of [null, '', 'JOIN', 'borrar', '../']) {
+      expect(ipRateLimitKindForParam(raw)).toBe(IP_RATE_LIMIT_KIND.JOIN);
+    }
   });
 
   it('sin cabecera CF-Connecting-IP no hay clave: se falla abierto, no cerrado', () => {

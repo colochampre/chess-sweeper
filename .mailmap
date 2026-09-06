@@ -1,0 +1,10 @@
+# Una sola persona, tres formas de firmar. Pasa por trabajar el mismo repositorio desde
+# maquinas con `user.name` distinto, y por los merges que GitHub firma con el correo
+# `noreply` de la cuenta. Sin esto, `git shortlog`, `git log --author` y cualquier metrica
+# de contribucion ven tres autores donde hay uno.
+#
+# No reescribe la historia: git aplica estos alias al leerla.
+# Formato: <nombre canonico> <correo canonico> <nombre en el commit> <correo en el commit>
+
+Colo Champre <colochampre3@gmail.com> Colo <colochampre3@gmail.com>
+Colo Champre <colochampre3@gmail.com> <71350974+colochampre@users.noreply.github.com>

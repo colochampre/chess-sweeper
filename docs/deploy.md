@@ -86,12 +86,25 @@ Lo que se anadio al salir de la red local, donde no hacia falta:
   locales, que es lo que permite desarrollar con Vite en el 5173 sin abrir la puerta a nadie;
   y si defines `ALLOWED_ORIGINS`, manda esa lista.
 - Tamano maximo por mensaje (4 KB) y limite de ritmo por conexion.
+- Limite de ritmo **por IP** antes de aceptar nada, con el limitador nativo de Workers. El de
+  conexion de arriba no servia contra quien abre conexiones sueltas. Son dos, porque el ataque
+  no es el mismo: `join` y `resume` adivinan un codigo de sala (15 cada 10 segundos), `create`
+  y `match` gastan Durable Objects nuevos (10 por minuto). La decision de que accion cae en
+  cual vive en `@cm/engine/abuse`; el Worker solo lee `CF-Connecting-IP` y llama al binding.
+  Va antes que la comprobacion de version, porque esa ya rechaza por el socket y eso cuesta.
+- `resume` contesta lo mismo exista la sala o no. Lleva el codigo ademas del token, asi que
+  dos mensajes distintos habrian dicho si un codigo adivinado era bueno sin acertar ninguno.
+  `join` si distingue: ahi lo tecleo una persona y le sirve saber cual de las dos cosas pasa.
 - Validacion estricta de los parametros de conexion, con el codigo de sala normalizado y el
   token comprobado contra el formato de UUID antes de tocar el almacenamiento.
 - *Heartbeat* en el servidor de LAN, para detectar conexiones que mueren en silencio.
 
 ## Lo que sigue pendiente
 
-- El codigo de sala son ~1.070 millones de combinaciones, pero `join` no tiene limite de
-  intentos por IP: alguien muy insistente podria acabar entrando en una sala ajena. Con el
-  limite de ritmo actual es lento, no imposible.
+- El limite por IP lo cuenta cada centro de datos por su cuenta, no hay un total. Quien
+  reparta el ataque entre varios colos multiplica su presupuesto por otros tantos. Frena a un
+  escaner suelto, que es el caso realista; no a uno repartido.
+- La ventana solo puede ser de 10 o 60 segundos: la eligio Cloudflare, no nosotros.
+- Los dos caminos por los que `resume` rechaza no tardan exactamente lo mismo, aunque digan lo
+  mismo. Son nanosegundos frente al ruido de la red, pero no es cero, y por eso `resume` sigue
+  contando en el limitador de `join`.

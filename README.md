@@ -63,7 +63,8 @@ npm run build && npm run dev:server    # http://<tu-ip-local>:8787
 
 - **Dos jugadores** en el mismo dispositivo. El tablero gira en cada turno.
 - **Contra la maquina**, en tres niveles.
-- **Online** por WebSocket, con servidor autoritativo.
+- **Online** por WebSocket, con servidor autoritativo: emparejamiento automatico o codigo de
+  sala, y reloj de partida opcional.
 
 En todos, **el jugador siempre ve sus piezas en la parte de abajo**.
 
@@ -204,4 +205,4 @@ y cambia `PIECE_SET` en `packages/client/src/theme.ts`. Detalles en
 - El bot no tiene busqueda de quiescencia ni tabla de transposicion, y se le nota en los
   finales: mas de la mitad de las partidas bot contra bot acaban en tablas por la regla de
   50 jugadas.
-- El online no tiene emparejamiento ni reloj de partida.
+- El online no limita los intentos de `join` por IP: ver [`docs/deploy.md`](docs/deploy.md).

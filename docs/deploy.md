@@ -38,8 +38,8 @@ Todo esta en `packages/worker/wrangler.jsonc`:
 | Clave | Para que |
 |---|---|
 | `assets` | Sirve `packages/client/dist` desde el propio Worker |
-| `durable_objects` | Enlaza la clase `Room` |
-| `migrations` | `new_sqlite_classes`, el respaldo disponible en el plan gratuito |
+| `durable_objects` | Enlaza dos clases: `Room` (una sala) y `Queue` (la cola de emparejamiento automatico, spec 005) |
+| `migrations` | `new_sqlite_classes`, el respaldo disponible en el plan gratuito. Una migracion por clase: `v1` dio de alta `Room`, `v2` dio de alta `Queue` |
 
 Variable opcional: **`ALLOWED_ORIGINS`**, una lista separada por comas. Sin definir, solo se
 acepta el origen del propio servicio. Solo hace falta si sirves el cliente desde otro dominio.
@@ -92,7 +92,6 @@ Lo que se anadio al salir de la red local, donde no hacia falta:
 
 ## Lo que sigue pendiente
 
-- No hay emparejamiento ni reloj de partida.
 - El codigo de sala son ~1.070 millones de combinaciones, pero `join` no tiene limite de
   intentos por IP: alguien muy insistente podria acabar entrando en una sala ajena. Con el
   limite de ritmo actual es lento, no imposible.

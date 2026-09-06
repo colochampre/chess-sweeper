@@ -36,6 +36,9 @@ import {
   opponentOf,
   parseIntent,
   playMove,
+  IP_RATE_LIMIT_KIND,
+  ipRateLimitKey,
+  ipRateLimitKindForParam,
   clockMsLeft,
   clockRunningFor,
   declineDraw,
@@ -63,6 +66,15 @@ export interface Env {
   ASSETS: Fetcher;
   /** Origenes permitidos, separados por comas. Sin definir: solo el propio host. */
   ALLOWED_ORIGINS?: string;
+  /**
+   * Limitador por IP para `join`: fuerza bruta de codigos de sala. Opcional porque
+   * `wrangler dev` y miniflare no siempre lo emulan, y los tests no tienen un binding de
+   * verdad; cada llamada lo comprueba antes de usarlo (ver `ipRateLimited`).
+   */
+  RATE_LIMIT_JOIN?: RateLimit;
+  /** Limitador por IP para `create`/`match`: gasto de Durable Objects nuevos. Mismo motivo
+   *  de opcionalidad que `RATE_LIMIT_JOIN`. */
+  RATE_LIMIT_CREATE?: RateLimit;
 }
 
 /** Un movimiento son unas decenas de bytes; por encima de esto es basura o un ataque. */
@@ -111,6 +123,36 @@ function originAllowed(request: Request, env: Env): boolean {
     host: new URL(request.url).host,
     allowed: env.ALLOWED_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean),
   });
+}
+
+/**
+ * Control de abuso por IP, aparte del `RATE_LIMIT` de mas abajo: ese cuenta mensajes por
+ * CONEXION ya aceptada, y no hace nada contra quien abre conexiones sueltas para adivinar
+ * codigos de sala (`join`) o para crear Durable Objects sin limite (`create`/`match`).
+ *
+ * Rechaza con 429 liso y no con `refuseSocket` (linea ~97): `refuseSocket` acepta un
+ * WebSocketPair completo solo para poder explicar el motivo, que es lo que pide FR-9 para un
+ * rechazo de protocolo o de sala -algo que el jugador puede arreglar-. Pagar ese socket en
+ * CADA intento de fuerza bruta anularia el limitador, asi que el control de abuso queda
+ * deliberadamente fuera de la regla de FR-9: aqui el que llama no tiene nada que arreglar,
+ * solo esperar.
+ *
+ * `env.RATE_LIMIT_JOIN`/`RATE_LIMIT_CREATE` son opcionales (ver `Env`): si el binding no
+ * esta -`wrangler dev` o miniflare sin emularlo, o los tests- no hay nada que comprobar y se
+ * deja pasar. Lo mismo si no llega `CF-Connecting-IP`: sin Cloudflare delante no hay IP que
+ * limitar, y fallar cerrado bloquearia a todo el mundo por igual en vez de a quien abusa.
+ */
+async function ipRateLimited(request: Request, env: Env, rawAction: string | null): Promise<boolean> {
+  const kind = ipRateLimitKindForParam(rawAction);
+
+  const key = ipRateLimitKey(request.headers.get('CF-Connecting-IP'));
+  if (key === null) return false;
+
+  const binding = kind === IP_RATE_LIMIT_KIND.JOIN ? env.RATE_LIMIT_JOIN : env.RATE_LIMIT_CREATE;
+  if (binding === undefined) return false;
+
+  const outcome = await binding.limit({ key });
+  return !outcome.success;
 }
 
 /**
@@ -166,6 +208,15 @@ export default {
     }
     if (!originAllowed(request, env)) {
       return new Response('Origen no permitido', { status: 403 });
+    }
+
+    // Antes que nada de lo que cuesta algo, y por eso con el parametro `a` todavia en crudo.
+    // Las comprobaciones de arriba -Upgrade y origen- son sincronas y gratis, pero la de
+    // version de aqui abajo NO lo es: rechaza por el socket (AC-905) y eso ya monta un
+    // `WebSocketPair`. Dejar el limitador despues abria una puerta para gastar sockets a
+    // ritmo libre sin mandar siquiera un codigo de sala valido.
+    if (await ipRateLimited(request, env, url.searchParams.get('a'))) {
+      return new Response('Demasiadas conexiones', { status: 429, headers: { 'Retry-After': '10' } });
     }
 
     // La version manda sobre el resto: a un cliente viejo, "parametros invalidos" no le sirve

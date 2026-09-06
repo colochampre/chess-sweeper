@@ -15,3 +15,4 @@ export * from './protocol.js';
 export * from './room.js';
 export * from './origin.js';
 export * from './clock.js';
+export * from './abuse.js';

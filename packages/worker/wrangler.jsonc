@@ -27,5 +27,19 @@
     { "tag": "v2", "new_sqlite_classes": ["Queue"] }
   ],
 
+  // Limite por IP antes de aceptar nada, aparte del limite por conexion que ya tiene el
+  // Durable Object: ese no sirve de nada contra quien abre conexiones sueltas para adivinar
+  // codigos de sala o para crear salas sin limite. Dos limitadores porque el ataque no es
+  // el mismo: `join` es adivinar (fuerza bruta contra 32^6 codigos posibles), `create` y
+  // `match` es gastar Durable Objects nuevos (lo que raciona el plan gratuito). 15 intentos
+  // de `join` cada 10 segundos por IP sobra para cualquier humano -ni tecleando codigos a
+  // mano se llega- y ya corta en seco a un escaner de codigos; 10 salas nuevas por minuto
+  // por IP es generoso para quien juega de verdad (varias partidas desde el mismo NAT
+  // compartido) y estrecho para quien crea salas al voleo. `period` solo admite 10 o 60.
+  "ratelimits": [
+    { "name": "RATE_LIMIT_JOIN", "namespace_id": "1001", "simple": { "limit": 15, "period": 10 } },
+    { "name": "RATE_LIMIT_CREATE", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } }
+  ],
+
   "observability": { "enabled": true }
 }
